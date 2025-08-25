@@ -8,7 +8,7 @@ const envPath = path.resolve(process.cwd(), '.env'); // CWD가 다르면 엉뚱�
 const parsed = dotenv.parse(fs.readFileSync(envPath));
 
 // 1) 원하는 키만 화이트리스트로 강제 설정(override)
-const KEYS = ['RPC_URL','SERVER_URL','PRIVATE_KEY','DELEGATE_ADDRESS','TOKEN','TO','AMOUNT_WEI','CHAIN_ID', 'SPONSOR_PK'] as const;
+const KEYS = ['RPC_URL','SERVER_URL','PRIVATE_KEY','DELEGATE_ADDRESS','TOKEN','TO','AMOUNT_WEI','CHAIN_ID', 'SPONSOR_PK', 'PORT'] as const;
 for (const k of KEYS) {
   const v = parsed[k as keyof typeof parsed];
   if (v != null) process.env[k] = v.replace(/^\uFEFF/, '').replace(/[\r\n]+$/g, '').trim();
