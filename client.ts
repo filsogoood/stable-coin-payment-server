@@ -2,8 +2,21 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import axios from 'axios';
-import { ethers, Signature } from 'ethers';
+import { 
+  createWalletClient, 
+  createPublicClient, 
+  http, 
+  parseAbi,
+  encodeFunctionData,
+  decodeFunctionResult,
+  type Hex,
+  type Address,
+  type AuthorizationRequest,
+} from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { sepolia } from 'viem/chains';
 
+// 환경 변수 로드
 const envPath = path.resolve(process.cwd(), '.env');
 const parsed = dotenv.parse(fs.readFileSync(envPath));
 
@@ -25,10 +38,14 @@ const TO               = process.env.TO!;
 const AMOUNT_WEI       = process.env.AMOUNT_WEI!;
 const CHAIN_ID         = Number(process.env.CHAIN_ID!);
 
+// Helper functions
+const formatAddr = (addr: string) => addr as Address;
+const formatHex = (hex: string) => hex as Hex;
+
 type Transfer = {
-  from: string;
-  token: string;
-  to: string;
+  from: Address;
+  token: Address;
+  to: Address;
   amount: bigint;
   nonce: bigint;
   deadline: bigint;
@@ -36,83 +53,156 @@ type Transfer = {
 
 type AuthItem = {
   chainId: number;
-  address: string;         // delegate(implementation) contract
-  nonce: number;           // EOA tx nonce (not the contract nonce)
-  signature: `0x${string}`; // 65B serialized sig
+  address: Address;
+  nonce: number;
+  signature: Hex;
 };
 
+const DELEGATE_ABI = parseAbi([
+  'function executeSignedTransfer((address from,address token,address to,uint256 amount,uint256 nonce,uint256 deadline) t, bytes sig) external',
+  'function nonce() view returns (uint256)',
+]);
+
 // slot0 읽기 (fallback)
-async function readNextNonceViaStorage(provider: ethers.JsonRpcProvider, authority: string): Promise<bigint> {
-  const raw = await provider.getStorage(authority, 0);
+async function readNextNonceViaStorage(publicClient: any, authority: Address): Promise<bigint> {
+  const raw = await publicClient.getStorageAt({
+    address: authority,
+    slot: '0x0',
+  });
   return BigInt(raw || 0);
 }
 
 // authorizationList를 사용해 authority에서 nonce() view 호출
 async function readNextNonceViaAuthorizedView(
-  provider: ethers.JsonRpcProvider,
-  authority: string,
+  publicClient: any,
+  authority: Address,
   authItem: AuthItem
 ): Promise<bigint> {
-  const iface = new ethers.Interface(['function nonce() view returns (uint256)']);
-  const data  = iface.encodeFunctionData('nonce', []);
-
-  // ✅ ethers v6: call은 인자 1개만. 'latest' 제거
-  const ret = await provider.call({
-    to: authority,
-    data,
-    // ★ EIP-7702 컨텍스트
-    type: 4,
-    authorizationList: [authItem] as any,
-  } as any);
-
-  // ✅ decode 결과는 ethers.Result. 안전하게 꺼내서 bigint로 캐스팅
-  const decoded = iface.decodeFunctionResult('nonce', ret);
-  const nextNonce = decoded[0] as bigint; // v6에선 uint256 -> bigint
-  return nextNonce;
-}
-
-// 필요 시 fresh authorization 생성
-async function ensureAuthorization(
-  signer: ethers.Wallet,
-  provider: ethers.JsonRpcProvider
-): Promise<AuthItem> {
-  const authority     = signer.address;
-  const eoaNonceLatest = await provider.getTransactionCount(authority, 'latest');
-
-  const auth = await signer.authorize({
-    address: DELEGATE_ADDRESS,
-    nonce:   eoaNonceLatest,
-    chainId: CHAIN_ID,
+  const data = encodeFunctionData({
+    abi: DELEGATE_ABI,
+    functionName: 'nonce',
+    args: [],
   });
 
-  return {
-    chainId: Number(auth.chainId),
-    address: auth.address,
-    nonce:   Number(auth.nonce),
-    signature: (auth.signature as Signature).serialized as `0x${string}`,
-  };
+  // Viem: authorized call
+  const result = await publicClient.request({
+    method: 'eth_call',
+    params: [
+      {
+        to: authority,
+        data,
+        type: '0x4',
+        authorizationList: [authItem],
+      },
+      'latest'
+    ],
+  });
+
+  const decoded = decodeFunctionResult({
+    abi: DELEGATE_ABI,
+    functionName: 'nonce',
+    data: result,
+  });
+
+  return decoded as bigint;
+}
+
+// EIP-7702 authorization 생성
+async function ensureAuthorization(
+  walletClient: any,
+  publicClient: any,
+  authority: Address
+): Promise<AuthItem> {
+  const eoaNonce = await publicClient.getTransactionCount({ 
+    address: authority, 
+    blockTag: 'latest' 
+  });
+
+  try {
+    console.log('🔍 Creating EIP-7702 authorization with Viem...');
+    console.log('  - Delegate Address:', DELEGATE_ADDRESS);
+    console.log('  - Chain ID:', CHAIN_ID);
+    console.log('  - EOA Nonce:', eoaNonce);
+
+    // Viem의 signAuthorization 사용
+    const authorization = await walletClient.signAuthorization({
+      contractAddress: formatAddr(DELEGATE_ADDRESS),
+      chainId: CHAIN_ID,
+      nonce: eoaNonce,
+    });
+
+    console.log('✅ Authorization created:', {
+      chainId: authorization.chainId,
+      address: authorization.contractAddress,
+      nonce: authorization.nonce,
+      signature: authorization.signature,
+    });
+
+    return {
+      chainId: authorization.chainId,
+      address: authorization.contractAddress,
+      nonce: authorization.nonce,
+      signature: authorization.signature,
+    };
+
+  } catch (error: any) {
+    console.error('❌ EIP-7702 authorization 실패:', error);
+    
+    // 구체적인 에러 메시지
+    let errorMsg = 'EIP-7702 authorization 실패: ';
+    if (error?.message?.includes('not supported')) {
+      errorMsg += 'Viem에서 EIP-7702가 지원되지 않습니다. 최신 버전을 사용하세요.';
+    } else {
+      errorMsg += error?.message || '알 수 없는 오류';
+    }
+    
+    throw new Error(errorMsg);
+  }
 }
 
 async function main() {
-  const provider    = new ethers.JsonRpcProvider(RPC_URL);
-  const firstSigner = new ethers.Wallet(AUTHORITY_PK, provider);
-  const authority   = firstSigner.address;
+  // Sepolia 체인 설정
+  const chain = sepolia;
+  
+  // Public Client 생성 (읽기 전용)
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(RPC_URL),
+  });
 
-  const net = await provider.getNetwork();
-  if (Number(net.chainId) !== CHAIN_ID) {
-    throw new Error(`RPC chainId(${Number(net.chainId)}) != CHAIN_ID(${CHAIN_ID})`);
+  // Account 생성
+  const account = privateKeyToAccount(formatHex(AUTHORITY_PK));
+  const authority = account.address;
+
+  // Wallet Client 생성 (트랜잭션 전송용)
+  const walletClient = createWalletClient({
+    account,
+    chain,
+    transport: http(RPC_URL),
+  });
+
+  // 체인 ID 확인
+  const chainId = await publicClient.getChainId();
+  if (Number(chainId) !== CHAIN_ID) {
+    throw new Error(`RPC chainId(${Number(chainId)}) != CHAIN_ID(${CHAIN_ID})`);
   }
 
+  console.log('🚀 Starting EIP-7702 payment with Viem');
+  console.log('  - Authority:', authority);
+  console.log('  - Chain:', chain.name);
+
   // 1) authorization 준비
-  const authItem = await ensureAuthorization(firstSigner, provider);
+  const authItem = await ensureAuthorization(walletClient, publicClient, authority);
 
   // 2) nextNonce 읽기: 우선 authorized view → 실패 시 slot0 폴백
   let nextNonce: bigint;
   try {
-    nextNonce = await readNextNonceViaAuthorizedView(provider, authority, authItem);
+    nextNonce = await readNextNonceViaAuthorizedView(publicClient, authority, authItem);
+    console.log('✅ Got nonce via authorized view:', nextNonce.toString());
   } catch (e: any) {
-    console.warn('[warn] authorized nonce() view 실패, slot0 폴백 사용:', e?.shortMessage || e?.message || e);
-    nextNonce = await readNextNonceViaStorage(provider, authority);
+    console.warn('[warn] authorized nonce() view 실패, slot0 폴백 사용:', e?.message);
+    nextNonce = await readNextNonceViaStorage(publicClient, authority);
+    console.log('✅ Got nonce via slot0:', nextNonce.toString());
   }
 
   // 3) EIP-712 서명
@@ -120,7 +210,7 @@ async function main() {
     name: 'DelegatedTransfer',
     version: '1',
     chainId: CHAIN_ID,
-    verifyingContract: authority, // EOA 자체
+    verifyingContract: formatAddr(DELEGATE_ADDRESS),
   } as const;
 
   const types = {
@@ -129,41 +219,53 @@ async function main() {
       { name: 'token',    type: 'address' },
       { name: 'to',       type: 'address' },
       { name: 'amount',   type: 'uint256' },
-      { name: 'nonce',    type: 'uint256' }, // == nextNonce
+      { name: 'nonce',    type: 'uint256' },
       { name: 'deadline', type: 'uint256' },
     ],
   } as const;
 
-  const t: Transfer = {
+  const transfer: Transfer = {
     from:     authority,
-    token:    TOKEN,
-    to:       TO,
+    token:    formatAddr(TOKEN),
+    to:       formatAddr(TO),
     amount:   BigInt(AMOUNT_WEI),
     nonce:    nextNonce,
     deadline: BigInt(Math.floor(Date.now()/1000) + 300), // 5분
   };
 
-  const signature712 = await firstSigner.signTypedData(domain as any, types as any, t as any);
+  console.log('🖊️  Signing EIP-712 message...');
+  const signature712 = await walletClient.signTypedData({
+    domain,
+    types,
+    primaryType: 'Transfer',
+    message: transfer,
+  });
 
-  // 4) 서버로 전송 (BigInt → 문자열)
+  console.log('✅ EIP-712 signature:', signature712);
+
+  // 4) 서버로 전송
   const body = {
-    authority,
+    authority: authority,
     transfer: {
-      from: t.from,
-      token: t.token,
-      to:   t.to,
-      amount:  t.amount.toString(),
-      nonce:   t.nonce.toString(),
-      deadline:t.deadline.toString(),
+      from: transfer.from,
+      token: transfer.token,
+      to: transfer.to,
+      amount: transfer.amount.toString(),
+      nonce: transfer.nonce.toString(),
+      deadline: transfer.deadline.toString(),
     },
     domain,
     types,
     signature712,
-    authorization: authItem, // 재위임 재사용이면 생략 가능
+    authorization: authItem,
   };
 
+  console.log('📤 Sending to server...');
   const res = await axios.post(`${SERVER_URL}/payment`, body);
-  console.log('server:', res.data);
+  console.log('✅ Server response:', res.data);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { 
+  console.error('❌ Error:', e); 
+  process.exit(1); 
+});
