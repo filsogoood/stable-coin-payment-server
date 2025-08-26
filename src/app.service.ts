@@ -786,6 +786,13 @@ export class AppService {
         <div id="loading" class="loading" style="display: none;">
             처리 중입니다...
         </div>
+        
+        <!-- 모바일 디버깅용 로그 -->
+        <div id="debugLog" style="display: none; margin-top: 20px; padding: 10px; background: #f8f9fa; border-radius: 8px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;">
+            <h4>디버그 로그:</h4>
+            <div id="logContent"></div>
+        </div>
+        <button id="toggleLog" style="margin-top: 10px; background: #6c757d; color: white; padding: 5px 10px; font-size: 12px;">디버그 로그 보기</button>
     </div>
 
     <!-- EventEmitter2 먼저 로드 -->
@@ -822,6 +829,54 @@ export class AppService {
         const payBtn = document.getElementById('payBtn');
         const statusDiv = document.getElementById('status');
         const loadingDiv = document.getElementById('loading');
+        const debugLogDiv = document.getElementById('debugLog');
+        const logContentDiv = document.getElementById('logContent');
+        const toggleLogBtn = document.getElementById('toggleLog');
+
+        // 모바일 디버깅용 로그 기능
+        let debugLogs = [];
+        const originalConsole = {
+            log: console.log,
+            error: console.error,
+            warn: console.warn
+        };
+
+        function addToDebugLog(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = \`[\${timestamp}] \${type.toUpperCase()}: \${message}\`;
+            debugLogs.push(logEntry);
+            if (logContentDiv) {
+                logContentDiv.innerHTML = debugLogs.slice(-20).map(log => \`<div>\${log}</div>\`).join('');
+                logContentDiv.scrollTop = logContentDiv.scrollHeight;
+            }
+        }
+
+        // 콘솔 오버라이드
+        console.log = function(...args) {
+            originalConsole.log.apply(console, args);
+            addToDebugLog('LOG', args.join(' '));
+        };
+        console.error = function(...args) {
+            originalConsole.error.apply(console, args);
+            addToDebugLog('ERROR', args.join(' '));
+        };
+        console.warn = function(...args) {
+            originalConsole.warn.apply(console, args);
+            addToDebugLog('WARN', args.join(' '));
+        };
+
+        // 로그 토글 버튼
+        if (toggleLogBtn) {
+            toggleLogBtn.addEventListener('click', () => {
+                if (debugLogDiv.style.display === 'none') {
+                    debugLogDiv.style.display = 'block';
+                    toggleLogBtn.textContent = '디버그 로그 숨기기';
+                } else {
+                    debugLogDiv.style.display = 'none';
+                    toggleLogBtn.textContent = '디버그 로그 보기';
+                }
+            });
+        }
 
         // URL 파라미터에서 결제 정보 가져오기
         const urlParams = new URLSearchParams(window.location.search);
@@ -895,7 +950,24 @@ export class AppService {
                 showLoading(false);
             } catch (error) {
                 console.error('Connection error:', error);
-                showStatus('연결 실패: ' + error.message, 'error');
+                
+                // 네트워크 관련 에러인지 확인
+                let errorMessage = error.message;
+                if (error.message.includes('User rejected') || error.code === 4001) {
+                    errorMessage = '사용자가 MetaMask 연결을 거부했습니다.';
+                } else if (error.message.includes('No Ethereum provider')) {
+                    errorMessage = 'MetaMask가 설치되어 있지 않습니다.';
+                } else if (error.message.includes('Chain')) {
+                    errorMessage = \`네트워크 변경에 실패했습니다. 수동으로 체인 ID \${CHAIN_ID}로 변경해주세요.\`;
+                }
+                
+                showStatus('연결 실패: ' + errorMessage, 'error');
+                console.error('연결 상세 오류 정보:', {
+                    name: error.name,
+                    message: error.message,
+                    code: error.code,
+                    currentUrl: window.location.href
+                });
                 showLoading(false);
             }
         });
@@ -984,18 +1056,30 @@ export class AppService {
                     // Authorization은 완전히 서버에서 처리되므로 제거됨
                 };
 
+                console.log('🌐 서버로 가스리스 결제 요청 전송:', SERVER_URL + '/server-payment');
+                
                 // 새로운 서버 기반 엔드포인트 사용
                 const response = await fetch(SERVER_URL + '/server-payment', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'ngrok-skip-browser-warning': 'true',
                     },
                     body: JSON.stringify(body),
                 });
 
-                const result = await response.json();
+                console.log('📡 서버 응답 상태:', response.status, response.statusText);
 
-                if (response.ok && result.status === 'ok') {
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ 서버 오류 응답:', errorText);
+                    throw new Error(\`서버 오류 (\${response.status}): \${errorText}\`);
+                }
+
+                const result = await response.json();
+                console.log('✅ 서버 응답 데이터:', result);
+
+                if (result.status === 'ok') {
                     showStatus('🎉 가스리스 결제가 완료되었습니다! 트랜잭션: ' + result.txHash, 'success');
                     console.log('🔐 서버에서 생성된 Authorization:', result.authorization);
                 } else {
@@ -1004,7 +1088,28 @@ export class AppService {
 
             } catch (error) {
                 console.error('Payment error:', error);
-                showStatus('결제 실패: ' + error.message, 'error');
+                
+                // 네트워크 관련 에러인지 확인
+                let errorMessage = error.message;
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    errorMessage = \`네트워크 연결 실패: 서버 URL(\${SERVER_URL})에 접근할 수 없습니다. ngrok이 실행중인지 확인하세요.\`;
+                } else if (error.message.includes('CORS')) {
+                    errorMessage = \`CORS 오류: 서버 설정을 확인하세요. 현재 URL: \${window.location.origin}\`;
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorMessage = \`서버 연결 실패: \${SERVER_URL}에 접근할 수 없습니다. 서버가 실행 중이고 CORS가 올바르게 설정되어 있는지 확인하세요.\`;
+                } else if (error.message.includes('User rejected') || error.code === 4001) {
+                    errorMessage = '사용자가 MetaMask 서명을 거부했습니다.';
+                }
+                
+                showStatus('결제 실패: ' + errorMessage, 'error');
+                console.error('상세 오류 정보:', {
+                    name: error.name,
+                    message: error.message,
+                    code: error.code,
+                    stack: error.stack,
+                    serverUrl: SERVER_URL,
+                    currentUrl: window.location.href
+                });
             } finally {
                 showLoading(false);
             }
@@ -1022,7 +1127,21 @@ export class AppService {
 
         // 페이지 로드시 초기화
         window.addEventListener('load', () => {
+            console.log('🚀 페이지 로드 완료');
+            console.log('🌐 현재 URL:', window.location.href);
+            console.log('📡 서버 URL:', SERVER_URL);
+            console.log('🔗 체인 ID:', CHAIN_ID);
+            console.log('📱 사용자 에이전트:', navigator.userAgent);
+            console.log('🔍 MetaMask 감지:', typeof window.ethereum !== 'undefined' && window.ethereum.isMetaMask);
+            
             showStatus('MetaMask SDK를 준비 중입니다. 연결 버튼을 클릭하세요.', 'info');
+            
+            // 모바일 환경 체크
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                console.log('📱 모바일 환경 감지됨');
+                addToDebugLog('INFO', \`모바일 환경에서 실행 중 - \${navigator.userAgent}\`);
+            }
         });
     </script>
 </body>
