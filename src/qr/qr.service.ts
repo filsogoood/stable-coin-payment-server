@@ -7,6 +7,7 @@ export interface PaymentRequest {
   token?: string;
   memo?: string;
   chainId?: number; // 체인 ID 추가
+  autoExecute?: boolean; // 자동 실행 옵션 추가
 }
 
 @Injectable()
@@ -15,15 +16,22 @@ export class QrService {
   private readonly DEFAULT_CHAIN_ID = 11155111;
 
   /**
-   * 결제 요청 QR 코드 생성 (EIP-681 표준)
+   * 결제 요청 QR 코드 생성 (자동 실행 URL 또는 EIP-681 표준)
    */
   async generatePaymentQR(paymentRequest: PaymentRequest): Promise<string> {
     try {
-      // EIP-681 형태의 URI 생성
-      const ethereumUri = this.generateEthereumURI(paymentRequest);
+      let qrContent: string;
+      
+      // 자동 실행 옵션이 활성화된 경우 웹 URL 생성
+      if (paymentRequest.autoExecute) {
+        qrContent = this.generateExecutionURL(paymentRequest);
+      } else {
+        // 기존 EIP-681 형태의 URI 생성
+        qrContent = this.generateEthereumURI(paymentRequest);
+      }
 
       // QR 코드 생성 (Base64 형태로 반환)
-      const qrCode = await QRCode.toDataURL(ethereumUri, {
+      const qrCode = await QRCode.toDataURL(qrContent, {
         errorCorrectionLevel: 'M',
         width: 256,
         margin: 2,
@@ -92,6 +100,32 @@ export class QrService {
       // 토큰 컨트랙트 주소를 먼저, 그 다음 transfer 함수 호출
       return `ethereum:${paymentRequest.token}@${chainId}/transfer?address=${paymentRequest.to}&uint256=${tokenAmount}`;
     }
+  }
+
+  /**
+   * 자동 실행 웹 URL 생성
+   * QR 코드 스캔 시 자동으로 결제가 실행되는 웹 페이지로 이동
+   */
+  private generateExecutionURL(paymentRequest: PaymentRequest): string {
+    const baseUrl = process.env.SERVER_URL || 'http://localhost:4123';
+    const params = new URLSearchParams();
+    
+    params.append('to', paymentRequest.to);
+    params.append('amount', paymentRequest.amount);
+    
+    if (paymentRequest.token) {
+      params.append('token', paymentRequest.token);
+    }
+    
+    if (paymentRequest.chainId) {
+      params.append('chainId', paymentRequest.chainId.toString());
+    }
+    
+    if (paymentRequest.memo) {
+      params.append('memo', paymentRequest.memo);
+    }
+    
+    return `${baseUrl}/qr/execute?${params.toString()}`;
   }
 
   /**
