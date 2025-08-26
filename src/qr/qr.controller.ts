@@ -255,7 +255,7 @@ export class QrController {
             
             <div class="status" id="statusSection">
               <div class="loading"></div>
-              <div class="status-text">Metamask 연결 중...</div>
+              <div class="status-text">MetaMask 연결 및 EIP-7702 Authorization 중...</div>
             </div>
             
             <div class="success" id="successSection">
@@ -264,7 +264,7 @@ export class QrController {
               <p>Metamask를 통해 트랜잭션이 성공적으로 전송되었습니다.</p>
               <div class="tx-hash" id="txHash"></div>
               <div class="gas-sponsor-badge">
-                🦊 Metamask 지갑을 통해 결제되었습니다
+                ⚡ EIP-7702 Authorization + 서버 가스비 대납 완료
               </div>
             </div>
             
@@ -512,56 +512,160 @@ export class QrController {
               }
             }
             
-            // ETH 전송 트랜잭션 실행
+            // EIP-712 서명을 통한 ETH 전송 (서버에서 가스비 대납)
             async function sendETHTransaction(signer) {
               const statusText = document.querySelector('.status-text');
               
               try {
-                statusText.textContent = 'ETH 전송을 위해 Metamask에서 승인을 기다리는 중...';
+                statusText.textContent = 'EIP-712 서명 생성 중...';
                 
-                const transaction = {
-                  to: paymentInfo.to,
-                  value: ethers.parseEther(paymentInfo.amount),
-                  gasLimit: 21000,
+                const userAddress = await signer.getAddress();
+                console.log('사용자 주소:', userAddress);
+                
+                // 1. EIP-7702 Authorization 생성 시도 (선택적)
+                let authorization = null;
+                const provider = signer.provider;
+                const currentNonce = await provider.getTransactionCount(userAddress, 'latest');
+                
+                // 환경변수에서 delegate 주소 가져오기 (기본값 설정)
+                const delegateAddress = '${process.env.DELEGATE_ADDRESS || '0x8ea3B7F221e883EF51175c24Fff469FE90D59669'}';
+                
+                try {
+                  statusText.textContent = 'EIP-7702 Authorization 생성 중...';
+                  
+                  // EIP-7702 Authorization 생성 시도 (브라우저 환경)
+                  // MetaMask가 EIP-7702를 완전히 지원하지 않을 수 있으므로 try-catch 사용
+                  const authSig = await provider.send('eth_signTypedData_v4', [
+                    userAddress,
+                    JSON.stringify({
+                      types: {
+                        EIP7702Authorization: [
+                          { name: 'chainId', type: 'uint256' },
+                          { name: 'nonce', type: 'uint256' },
+                          { name: 'address', type: 'address' },
+                        ],
+                      },
+                      primaryType: 'EIP7702Authorization',
+                      domain: {
+                        name: 'EIP7702',
+                        version: '1',
+                      },
+                      message: {
+                        chainId: paymentInfo.chainId,
+                        nonce: currentNonce,
+                        address: delegateAddress,
+                      },
+                    })
+                  ]);
+                  
+                  authorization = {
+                    chainId: paymentInfo.chainId,
+                    address: delegateAddress,
+                    nonce: currentNonce,
+                    signature: { serialized: authSig }
+                  };
+                  
+                  console.log('EIP-7702 Authorization 생성 성공');
+                } catch (authError) {
+                  console.warn('EIP-7702 Authorization 생성 실패 (선택적), 계속 진행:', authError);
+                  // Authorization 없이 계속 진행 (서버에서 처리)
+                  statusText.textContent = '서명 준비 중...';
+                }
+                
+                // 2. 다음 nonce 읽기 (authorization이 있으면 authorized view 사용)
+                statusText.textContent = 'Nonce 확인 중...';
+                const nextNonce = authorization ? await getNextNonceWithAuthorization(userAddress, authorization) : BigInt(0);
+                
+                // 3. EIP-712 서명 생성
+                statusText.textContent = 'EIP-712 서명 생성 중...';
+                const domain = {
+                  name: 'DelegatedTransfer',
+                  version: '1',
+                  chainId: paymentInfo.chainId,
+                  verifyingContract: delegateAddress, // MetaMask 보안 정책: 자기 자신이 아닌 delegate contract 사용
                 };
                 
-                console.log('전송할 ETH 트랜잭션:', transaction);
+                const types = {
+                  Transfer: [
+                    { name: 'from', type: 'address' },
+                    { name: 'token', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'amount', type: 'uint256' },
+                    { name: 'nonce', type: 'uint256' },
+                    { name: 'deadline', type: 'uint256' },
+                  ],
+                };
                 
-                // Metamask에서 트랜잭션 서명 및 전송
-                const txResponse = await signer.sendTransaction(transaction);
+                const transfer = {
+                  from: userAddress,
+                  token: '0x0000000000000000000000000000000000000000', // ETH
+                  to: paymentInfo.to,
+                  amount: ethers.parseEther(paymentInfo.amount),
+                  nonce: nextNonce,
+                  deadline: Math.floor(Date.now() / 1000) + 300, // 5분 후 만료
+                };
                 
-                statusText.textContent = 'ETH 트랜잭션 전송됨. 확인 대기 중...';
-                console.log('트랜잭션 해시:', txResponse.hash);
+                const signature712 = await signer.signTypedData(domain, types, transfer);
                 
-                // 트랜잭션 확인 대기
-                const receipt = await txResponse.wait();
-                console.log('트랜잭션 확인됨:', receipt);
+                // 4. 서버로 전송 (EIP-7702 authorization 선택적 포함)
+                statusText.textContent = '서버에서 트랜잭션 실행 중... (가스비 대납)';
+                const requestBody = {
+                  authority: userAddress,
+                  transfer: {
+                    ...transfer,
+                    amount: transfer.amount.toString(),
+                    nonce: transfer.nonce.toString(),
+                    deadline: transfer.deadline.toString(),
+                  },
+                  domain,
+                  types,
+                  signature712,
+                };
                 
-                // 성공 화면 표시
-                showSuccess({
-                  txHash: txResponse.hash,
-                  gasSponsor: 'User (via Metamask)',
-                  status: 'ok',
-                  tokenType: 'ETH'
+                // authorization이 있을 때만 포함
+                if (authorization) {
+                  requestBody.authorization = {
+                    chainId: Number(authorization.chainId),
+                    address: authorization.address,
+                    nonce: Number(authorization.nonce),
+                    signature: authorization.signature.serialized, // ethers v6 형식
+                  };
+                }
+                
+                const response = await fetch(\`\${serverUrl}/payment\`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(requestBody),
                 });
                 
-              } catch (error) {
-                if (error.code === 4001) {
-                  throw new Error('사용자가 트랜잭션을 취소했습니다.');
-                } else if (error.code === -32603) {
-                  throw new Error('잔액이 부족합니다. ETH를 충전해주세요.');
+                const result = await response.json();
+                
+                if (result.status === 'ok') {
+                  showSuccess({
+                    txHash: result.txHash,
+                    gasSponsor: result.gasSponsor || 'Server',
+                    status: 'ok',
+                    tokenType: 'ETH'
+                  });
                 } else {
-                  throw new Error(\`ETH 전송 실패: \${error.message}\`);
+                  throw new Error(result.error || '서버 결제 처리 실패');
+                }
+                
+                              } catch (error) {
+                if (error.code === 4001) {
+                  throw new Error('사용자가 EIP-7702 Authorization 또는 서명을 취소했습니다.');
+                } else {
+                  throw new Error(\`EIP-7702 ETH 결제 실패: \${error.message}\`);
                 }
               }
             }
             
-            // ERC-20 토큰 전송 트랜잭션 실행
+            // EIP-712 서명을 통한 토큰 전송 (서버에서 가스비 대납)
             async function sendTokenTransaction(signer, tokenAddress) {
               const statusText = document.querySelector('.status-text');
               
               try {
-                statusText.textContent = '토큰 컨트랙트 확인 중...';
+                statusText.textContent = '토큰 정보 확인 중...';
                 
                 // 토큰 주소 유효성 검사
                 if (!tokenAddress || !ethers.isAddress(tokenAddress)) {
@@ -570,127 +674,150 @@ export class QrController {
                 
                 console.log('토큰 컨트랙트 주소:', tokenAddress);
                 
-                // ERC-20 토큰 컨트랙트 ABI (필수 함수들)
-                const tokenABI = [
-                  "function transfer(address to, uint256 amount) returns (bool)",
-                  "function decimals() view returns (uint8)",
-                  "function symbol() view returns (string)",
-                  "function balanceOf(address owner) view returns (uint256)"
-                ];
+                const userAddress = await signer.getAddress();
+                console.log('사용자 주소:', userAddress);
                 
-                // 토큰 컨트랙트 인스턴스 생성
-                const tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
+                // 1. EIP-7702 Authorization 생성 시도 (선택적)
+                let authorization = null;
+                const provider = signer.provider;
+                const currentNonce = await provider.getTransactionCount(userAddress, 'latest');
                 
-                // 토큰 정보 조회 및 컨트랙트 존재 여부 확인
-                statusText.textContent = '토큰 정보 확인 중...';
-                let decimals = 18; // 기본값
-                let symbol = 'TOKEN';
+                // 환경변수에서 delegate 주소 가져오기 (기본값 설정)
+                const delegateAddress = '${process.env.DELEGATE_ADDRESS || '0x8ea3B7F221e883EF51175c24Fff469FE90D59669'}';
                 
                 try {
-                  // 토큰 컨트랙트가 존재하는지 확인
-                  const provider = signer.provider;
-                  const code = await provider.getCode(tokenAddress);
+                  statusText.textContent = 'EIP-7702 Authorization 생성 중...';
                   
-                  if (code === '0x') {
-                    throw new Error('토큰 컨트랙트가 존재하지 않습니다. 올바른 토큰 주소인지 확인해주세요.');
-                  }
-                  
-                  // 병렬로 토큰 정보 조회
-                  const [tokenDecimals, tokenSymbol] = await Promise.all([
-                    tokenContract.decimals().catch(() => 18), // 실패 시 기본값
-                    tokenContract.symbol().catch(() => 'TOKEN') // 실패 시 기본값
+                  // EIP-7702 Authorization 생성 시도 (브라우저 환경)
+                  // MetaMask가 EIP-7702를 완전히 지원하지 않을 수 있으므로 try-catch 사용
+                  const authSig = await provider.send('eth_signTypedData_v4', [
+                    userAddress,
+                    JSON.stringify({
+                      types: {
+                        EIP7702Authorization: [
+                          { name: 'chainId', type: 'uint256' },
+                          { name: 'nonce', type: 'uint256' },
+                          { name: 'address', type: 'address' },
+                        ],
+                      },
+                      primaryType: 'EIP7702Authorization',
+                      domain: {
+                        name: 'EIP7702',
+                        version: '1',
+                      },
+                      message: {
+                        chainId: paymentInfo.chainId,
+                        nonce: currentNonce,
+                        address: delegateAddress,
+                      },
+                    })
                   ]);
                   
-                  decimals = tokenDecimals;
-                  symbol = tokenSymbol;
+                  authorization = {
+                    chainId: paymentInfo.chainId,
+                    address: delegateAddress,
+                    nonce: currentNonce,
+                    signature: { serialized: authSig }
+                  };
                   
-                  console.log(\`토큰 정보: \${symbol}, decimals: \${decimals}\`);
-                  
-                } catch (infoError) {
-                  console.log('토큰 정보 조회 실패:', infoError);
-                  
-                  // 토큰 컨트랙트가 존재하지 않는 경우
-                  if (infoError.message.includes('존재하지 않습니다')) {
-                    throw infoError;
-                  }
-                  
-                  // 기타 정보 조회 실패는 기본값으로 진행
-                  console.log('기본값으로 진행합니다.');
+                  console.log('EIP-7702 Authorization 생성 성공');
+                } catch (authError) {
+                  console.warn('EIP-7702 Authorization 생성 실패 (선택적), 계속 진행:', authError);
+                  // Authorization 없이 계속 진행 (서버에서 처리)
+                  statusText.textContent = '서명 준비 중...';
                 }
                 
-                // 사용자 토큰 잔액 확인
-                statusText.textContent = '토큰 잔액 확인 중...';
-                try {
-                  const userAddress = await signer.getAddress();
-                  const balance = await tokenContract.balanceOf(userAddress);
-                  const tokenAmount = ethers.parseUnits(paymentInfo.amount, decimals);
-                  
-                  console.log(\`사용자 주소: \${userAddress}\`);
-                  console.log(\`토큰 잔액: \${ethers.formatUnits(balance, decimals)} \${symbol}\`);
-                  console.log(\`전송 요청량: \${paymentInfo.amount} \${symbol}\`);
-                  
-                  if (balance < tokenAmount) {
-                    throw new Error(\`토큰 잔액이 부족합니다. 보유량: \${ethers.formatUnits(balance, decimals)} \${symbol}, 필요량: \${paymentInfo.amount} \${symbol}\`);
-                  }
-                  
-                } catch (balanceError) {
-                  console.log('잔액 확인 실패:', balanceError);
-                  if (balanceError.message.includes('토큰 잔액이 부족합니다')) {
-                    throw balanceError;
-                  }
-                  // 잔액 확인 실패는 무시하고 진행
+                // 2. 다음 nonce 읽기 (authorization이 있으면 authorized view 사용)
+                statusText.textContent = 'Nonce 확인 중...';
+                const nextNonce = authorization ? await getNextNonceWithAuthorization(userAddress, authorization) : BigInt(0);
+                
+                // 3. EIP-712 서명 생성
+                statusText.textContent = 'EIP-712 서명 생성 중...';
+                const domain = {
+                  name: 'DelegatedTransfer',
+                  version: '1',
+                  chainId: paymentInfo.chainId,
+                  verifyingContract: delegateAddress, // MetaMask 보안 정책: 자기 자신이 아닌 delegate contract 사용
+                };
+                
+                const types = {
+                  Transfer: [
+                    { name: 'from', type: 'address' },
+                    { name: 'token', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'amount', type: 'uint256' },
+                    { name: 'nonce', type: 'uint256' },
+                    { name: 'deadline', type: 'uint256' },
+                  ],
+                };
+                
+                // 토큰 전송 금액 (기본 18 decimals 사용)
+                const tokenAmount = ethers.parseUnits(paymentInfo.amount, 18);
+                
+                const transfer = {
+                  from: userAddress,
+                  token: tokenAddress,
+                  to: paymentInfo.to,
+                  amount: tokenAmount,
+                  nonce: nextNonce,
+                  deadline: Math.floor(Date.now() / 1000) + 300, // 5분 후 만료
+                };
+                
+                const signature712 = await signer.signTypedData(domain, types, transfer);
+                
+                // 4. 서버로 전송 (EIP-7702 authorization 선택적 포함)
+                statusText.textContent = '서버에서 토큰 전송 실행 중... (가스비 대납)';
+                const requestBody = {
+                  authority: userAddress,
+                  transfer: {
+                    ...transfer,
+                    amount: transfer.amount.toString(),
+                    nonce: transfer.nonce.toString(),
+                    deadline: transfer.deadline.toString(),
+                  },
+                  domain,
+                  types,
+                  signature712,
+                };
+                
+                // authorization이 있을 때만 포함
+                if (authorization) {
+                  requestBody.authorization = {
+                    chainId: Number(authorization.chainId),
+                    address: authorization.address,
+                    nonce: Number(authorization.nonce),
+                    signature: authorization.signature.serialized, // ethers v6 형식
+                  };
                 }
                 
-                statusText.textContent = '토큰 전송을 위해 Metamask에서 승인을 기다리는 중...';
-                
-                // 토큰 양 계산 (decimals 고려)
-                const tokenAmount = ethers.parseUnits(paymentInfo.amount, decimals);
-                console.log(\`전송할 토큰 양: \${paymentInfo.amount} \${symbol} = \${tokenAmount.toString()} wei\`);
-                
-                // 토큰 전송 트랜잭션 실행
-                const txResponse = await tokenContract.transfer(paymentInfo.to, tokenAmount);
-                
-                statusText.textContent = '토큰 트랜잭션 전송됨. 확인 대기 중...';
-                console.log('토큰 전송 트랜잭션 해시:', txResponse.hash);
-                
-                // 트랜잭션 확인 대기
-                const receipt = await txResponse.wait();
-                console.log('토큰 전송 트랜잭션 확인됨:', receipt);
-                
-                // 성공 화면 표시
-                showSuccess({
-                  txHash: txResponse.hash,
-                  gasSponsor: 'User (via Metamask)',
-                  status: 'ok',
-                  tokenType: symbol,
-                  tokenAddress: tokenAddress
+                const response = await fetch(\`\${serverUrl}/payment\`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(requestBody),
                 });
                 
+                const result = await response.json();
+                
+                if (result.status === 'ok') {
+                  showSuccess({
+                    txHash: result.txHash,
+                    gasSponsor: result.gasSponsor || 'Server',
+                    status: 'ok',
+                    tokenType: 'TOKEN',
+                    tokenAddress: tokenAddress
+                  });
+                } else {
+                  throw new Error(result.error || '서버 토큰 결제 처리 실패');
+                }
+                
               } catch (error) {
-                console.error('토큰 전송 상세 오류:', error);
+                console.error('토큰 서명 상세 오류:', error);
                 
                 // 구체적인 에러 처리
                 if (error.code === 4001) {
-                  throw new Error('사용자가 토큰 전송을 취소했습니다.');
-                } else if (error.code === -32603) {
-                  // JSON-RPC 에러 - 더 구체적인 메시지
-                  if (error.message.includes('execution reverted')) {
-                    throw new Error('토큰 전송이 실패했습니다. 토큰 잔액이나 컨트랙트 상태를 확인해주세요.');
-                  } else {
-                    throw new Error('블록체인 네트워크 오류가 발생했습니다. 네트워크 연결을 확인해주세요.');
-                  }
-                } else if (error.code === -32602) {
-                  throw new Error('잘못된 매개변수입니다. 토큰 주소나 금액을 확인해주세요.');
-                } else if (error.message.includes('insufficient allowance')) {
-                  throw new Error('토큰 사용 승인(allowance)이 부족합니다.');
-                } else if (error.message.includes('transfer amount exceeds balance')) {
-                  throw new Error('보유한 토큰 양이 부족합니다.');
-                } else if (error.message.includes('존재하지 않습니다')) {
-                  throw new Error(\`\${error.message} ETH 결제로 전환하려면 페이지를 새로고침하고 다시 시도해주세요.\`);
-                } else if (error.message.includes('토큰 잔액이 부족합니다')) {
-                  throw error; // 이미 구체적인 메시지
+                  throw new Error('사용자가 EIP-7702 Authorization 또는 토큰 서명을 취소했습니다.');
                 } else {
-                  throw new Error(\`토큰 전송 실패: \${error.message || '알 수 없는 오류가 발생했습니다.'}\`);
+                  throw new Error(\`EIP-7702 토큰 결제 실패: \${error.message || '알 수 없는 오류가 발생했습니다.'}\`);
                 }
               }
             }
@@ -698,7 +825,7 @@ export class QrController {
             // 수동 결제 실행
             async function executeManualPayment() {
               const privateKey = document.getElementById('privateKey').value;
-              const delegateAddress = document.getElementById('delegateAddress').value || '0x8B396D123560ac88aCBCf2d4e1d411C956cde5C5';
+              const delegateAddress = document.getElementById('delegateAddress').value || '${process.env.DELEGATE_ADDRESS || '0x8ea3B7F221e883EF51175c24Fff469FE90D59669'}';
               
               if (!privateKey || !privateKey.startsWith('0x')) {
                 alert('올바른 개인키를 입력해주세요 (0x로 시작)');
@@ -719,11 +846,21 @@ export class QrController {
                 
                 // 1. Authorization 생성
                 const eoaNonce = await provider.getTransactionCount(authority, 'latest');
-                const auth = await wallet.signAuthorization({
+                
+                // EIP-7702 Authorization을 수동으로 생성 (wallet 환경)
+                // ethers.Wallet도 authorize를 지원하지 않으므로 수동 생성
+                const authorizationHash = ethers.solidityPackedKeccak256(
+                  ['uint256', 'address', 'uint256'],
+                  [paymentInfo.chainId, delegateAddress, eoaNonce]
+                );
+                const authSignature = await wallet.signMessage(ethers.getBytes(authorizationHash));
+                
+                const auth = {
+                  chainId: paymentInfo.chainId,
                   address: delegateAddress,
                   nonce: eoaNonce,
-                  chainId: paymentInfo.chainId,
-                });
+                  signature: { serialized: authSignature }
+                };
                 
                 // 2. nextNonce 읽기
                 document.querySelector('.status-text').textContent = 'Nonce 확인 중...';
@@ -735,7 +872,7 @@ export class QrController {
                   name: 'DelegatedTransfer',
                   version: '1',
                   chainId: paymentInfo.chainId,
-                  verifyingContract: authority,
+                  verifyingContract: delegateAddress, // MetaMask 보안 정책: 자기 자신이 아닌 delegate contract 사용
                 };
                 
                 const types = {
@@ -777,10 +914,10 @@ export class QrController {
                     types,
                     signature712,
                     authorization: {
-                      chainId: auth.chainId,
+                      chainId: Number(auth.chainId),
                       address: auth.address,
-                      nonce: auth.nonce,
-                      signature: auth.signature,
+                      nonce: Number(auth.nonce),
+                      signature: auth.signature.serialized, // ethers v6 형식
                     },
                   }),
                 });
@@ -799,10 +936,44 @@ export class QrController {
               }
             }
             
-            // Nonce 조회
-            async function getNextNonce(authority, auth) {
-              // 간단히 0으로 시작 (실제로는 서버에서 조회해야 함)
-              return 0n;
+            // EIP-7702 Authorization을 사용한 Nonce 조회
+            async function getNextNonceWithAuthorization(authority, authorization) {
+              try {
+                // EIP-7702 authorized view로 nonce 읽기 시도
+                statusText.textContent = 'EIP-7702 컨텍스트에서 nonce 조회 중...';
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const iface = new ethers.Interface(['function nonce() view returns (uint256)']);
+                const data = iface.encodeFunctionData('nonce', []);
+
+                const ret = await provider.call({
+                  to: authority,
+                  data,
+                  type: 4, // EIP-7702 트랜잭션 타입
+                  authorizationList: [{
+                    chainId: Number(authorization.chainId),
+                    address: authorization.address,
+                    nonce: Number(authorization.nonce),
+                    signature: authorization.signature.serialized, // ethers v6 형식
+                  }],
+                });
+
+                const decoded = iface.decodeFunctionResult('nonce', ret);
+                console.log('EIP-7702 authorized view로 nonce 조회 성공:', decoded[0]);
+                return BigInt(decoded[0]);
+              } catch (error) {
+                console.warn('EIP-7702 authorized view 실패, storage 폴백 사용:', error);
+                
+                // 폴백: storage slot 0에서 nonce 읽기
+                try {
+                  const provider = new ethers.BrowserProvider(window.ethereum);
+                  const raw = await provider.getStorage(authority, 0);
+                  console.log('Storage slot 0에서 nonce 조회:', BigInt(raw || 0));
+                  return BigInt(raw || 0);
+                } catch (storageError) {
+                  console.warn('storage nonce 조회도 실패, 0으로 시작:', storageError);
+                  return BigInt(0);
+                }
+              }
             }
             
             // ethers.js 라이브러리 로드
@@ -838,7 +1009,8 @@ export class QrController {
                 <a href="https://sepolia.etherscan.io/tx/\${result.txHash}" target="_blank" style="color: #007bff; text-decoration: none;">\${result.txHash}</a><br><br>
                 <strong>결제 유형:</strong> \${result.tokenType || 'ETH'}<br>
                 \${tokenInfo}
-                <strong>결제 방식:</strong> Metamask 지갑<br>
+                <strong>결제 방식:</strong> EIP-7702 Authorization + EIP-712 서명 + 서버 대납<br>
+                <strong>가스비 대납자:</strong> \${result.gasSponsor || '서버'}<br>
                 <strong>네트워크:</strong> Sepolia Testnet
               \`;
             }

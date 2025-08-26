@@ -104,7 +104,10 @@ export class AppService {
 
     const net = await this.provider.getNetwork();
     if (Number(net.chainId) !== Number(domain?.chainId)) throw new BadRequestException('chainId mismatch');
-    if (!this.eqAddr(domain?.verifyingContract, authority)) throw new BadRequestException('verifyingContract must equal authority');
+    // verifyingContract는 delegate 주소를 사용 (MetaMask 보안 정책)
+    const delegateAddress = process.env.DELEGATE_ADDRESS || '0x8ea3B7F221e883EF51175c24Fff469FE90D59669';
+    this.logger.debug(`[VERIFY] Expected delegate: ${delegateAddress}, Got verifyingContract: ${domain?.verifyingContract}`);
+    if (!this.eqAddr(domain?.verifyingContract, delegateAddress)) throw new BadRequestException('verifyingContract must equal delegate address');
     if (!this.eqAddr(transfer.from, authority)) throw new BadRequestException('transfer.from must equal authority');
 
     const recovered = ethers.verifyTypedData(
