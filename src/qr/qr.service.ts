@@ -6,10 +6,14 @@ export interface PaymentRequest {
   amount: string;
   token?: string;
   memo?: string;
+  chainId?: number; // 체인 ID 추가
 }
 
 @Injectable()
 export class QrService {
+  // 기본 체인 ID (Sepolia)
+  private readonly DEFAULT_CHAIN_ID = 11155111;
+
   /**
    * 결제 요청 QR 코드 생성 (EIP-681 표준)
    */
@@ -45,10 +49,11 @@ export class QrService {
   /**
    * 간단한 지갑 주소 QR 코드 생성 (EIP-681 표준)
    */
-  async generateWalletAddressQR(address: string): Promise<string> {
+  async generateWalletAddressQR(address: string, chainId?: number): Promise<string> {
     try {
-      // 단순 지갑 주소는 ethereum: 접두사를 붙여서 생성
-      const ethereumUri = `ethereum:${address}`;
+      // 체인 ID 포함한 지갑 주소 생성
+      const chain = chainId || this.DEFAULT_CHAIN_ID;
+      const ethereumUri = `ethereum:${address}@${chain}`;
       
       const qrCode = await QRCode.toDataURL(ethereumUri, {
         errorCorrectionLevel: 'M',
@@ -68,16 +73,24 @@ export class QrService {
 
   /**
    * EIP-681 형태의 이더리움 URI 생성
+   * 형식: ethereum:주소@체인ID?파라미터
    */
   private generateEthereumURI(paymentRequest: PaymentRequest): string {
+    const chainId = paymentRequest.chainId || this.DEFAULT_CHAIN_ID;
+    
     if (!paymentRequest.token || paymentRequest.token === 'ETH') {
       // ETH 네이티브 토큰 결제
+      // 형식: ethereum:받는주소@체인ID?value=wei값
       const weiAmount = this.ethToWei(paymentRequest.amount);
-      return `ethereum:${paymentRequest.to}?value=${weiAmount}`;
+      return `ethereum:${paymentRequest.to}@${chainId}?value=${weiAmount}`;
     } else {
       // ERC-20 토큰 결제
+      // 형식: ethereum:토큰주소@체인ID/transfer?address=받는주소&uint256=토큰량
       const tokenAmount = this.tokenToWei(paymentRequest.amount, 18); // 기본 18 decimals 사용
-      return `ethereum:${paymentRequest.token}/transfer?address=${paymentRequest.to}&uint256=${tokenAmount}`;
+      
+      // MetaMask가 더 잘 인식하는 형식으로 변경
+      // 토큰 컨트랙트 주소를 먼저, 그 다음 transfer 함수 호출
+      return `ethereum:${paymentRequest.token}@${chainId}/transfer?address=${paymentRequest.to}&uint256=${tokenAmount}`;
     }
   }
 

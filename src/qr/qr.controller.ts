@@ -13,11 +13,18 @@ export class QrController {
   @Post('payment')
   async generatePaymentQR(@Body() paymentRequest: PaymentRequest) {
     try {
-      const qrCode = await this.qrService.generatePaymentQR(paymentRequest);
+      // 체인 ID 설정 (환경변수 사용)
+      const requestWithChain: PaymentRequest = {
+        ...paymentRequest,
+        chainId: paymentRequest.chainId || (process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 11155111)
+      };
+      
+      const qrCode = await this.qrService.generatePaymentQR(requestWithChain);
       return {
         success: true,
         qrCode,
-        data: paymentRequest,
+        data: requestWithChain,
+        chainId: requestWithChain.chainId,
       };
     } catch (error) {
       return {
@@ -35,12 +42,15 @@ export class QrController {
     try {
       // 테스트넷 기본 지갑 주소 설정
       const walletAddress = address || process.env.TO || '0x742d35Cc6634C0532925a3b8D5c1c9c8fFd5b1b8';
-      const qrCode = await this.qrService.generateWalletAddressQR(walletAddress);
+      const chainId = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 11155111;
+      const qrCode = await this.qrService.generateWalletAddressQR(walletAddress, chainId);
       
       return {
         success: true,
         qrCode,
         address: walletAddress,
+        chainId,
+        network: 'Sepolia Testnet',
       };
     } catch (error) {
       return {
@@ -65,6 +75,7 @@ export class QrController {
         amount: amount || '0.001',
         token: token || process.env.TOKEN || 'ETH',
         memo: memo || 'Payment Request',
+        chainId: process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 11155111,
       };
 
       const qrCode = await this.qrService.generatePaymentQR(paymentRequest);
@@ -72,6 +83,8 @@ export class QrController {
         success: true,
         qrCode,
         data: paymentRequest,
+        chainId: paymentRequest.chainId,
+        network: 'Sepolia Testnet',
       };
     } catch (error) {
       return {
@@ -92,7 +105,8 @@ export class QrController {
   ) {
     try {
       const walletAddress = address || process.env.TO || '0x742d35Cc6634C0532925a3b8D5c1c9c8fFd5b1b8';
-      const qrCode = await this.qrService.generateWalletAddressQR(walletAddress);
+      const chainId = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 11155111;
+      const qrCode = await this.qrService.generateWalletAddressQR(walletAddress, chainId);
       
       const html = `
         <!DOCTYPE html>
@@ -228,6 +242,7 @@ export class QrController {
         amount: amount || '0.001',
         token: token || process.env.TOKEN || 'ETH',
         memo: memo || 'Payment Request',
+        chainId: process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 11155111,
       };
 
       const qrCode = await this.qrService.generatePaymentQR(paymentRequest);
@@ -404,6 +419,7 @@ export class QrController {
         amount: amount || '0.001',
         token: token || process.env.TOKEN || 'ETH',
         memo: memo || 'Payment Request',
+        chainId: process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID) : 11155111,
       };
 
       // URI 텍스트 생성
