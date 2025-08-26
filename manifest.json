@@ -1,0 +1,16 @@
+{
+  "name": "ZETACUBE",
+  "short_name": "ZETACUBE",
+  "description": "ZETACUBE 스테이블 코인 결제 서비스",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#667eea",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32",
+      "type": "image/x-icon"
+    }
+  ]
+} 
