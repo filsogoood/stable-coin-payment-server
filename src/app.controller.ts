@@ -17,9 +17,15 @@ export class AppController {
     return this.appService.getPaymentPage(token, to, amount, res);
   }
 
-  // 유저 결제 요청
+  // 기존 결제 요청 (클라이언트 Authorization)
   @Post('payment')
   async payment(@Body() body: any) {
     return this.appService.payment(body);
+  }
+
+  // 새로운 서버 기반 가스리스 결제 요청
+  @Post('server-payment')
+  async serverPayment(@Body() body: any) {
+    return this.appService.processServerPayment(body);
   }
 }
