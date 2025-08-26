@@ -280,6 +280,28 @@ export class QrController {
               font-size: 24px;
               font-weight: 600;
             }
+            .gas-sponsor-info {
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              padding: 15px;
+              border-radius: 10px;
+              margin-bottom: 20px;
+              font-size: 14px;
+              animation: pulse 2s infinite;
+            }
+            @keyframes pulse {
+              0% { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.7); }
+              70% { box-shadow: 0 0 0 10px rgba(102, 126, 234, 0); }
+              100% { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0); }
+            }
+            .gas-sponsor-info h3 {
+              margin: 0 0 10px 0;
+              font-size: 16px;
+            }
+            .gas-sponsor-icon {
+              font-size: 24px;
+              margin-bottom: 5px;
+            }
             .qr-container {
               margin: 30px 0;
               padding: 20px;
@@ -349,6 +371,14 @@ export class QrController {
         <body>
           <div class="container">
             <h1>💰 결제 요청 QR 코드 (테스트넷)</h1>
+            
+            <div class="gas-sponsor-info">
+              <div class="gas-sponsor-icon">⛽</div>
+              <h3>🎉 가스비 무료!</h3>
+              <div>받는 쪽에서 가스비를 대납합니다</div>
+              <div style="font-size: 12px; margin-top: 5px;">보내는 분은 가스비 걱정 없이 결제하실 수 있습니다</div>
+            </div>
+            
             <div class="qr-container">
               <img src="${qrCode}" alt="결제 요청 QR 코드" class="qr-code">
             </div>
@@ -374,10 +404,15 @@ export class QrController {
                 <span class="payment-label">메모:</span>
                 <span class="payment-value">${paymentRequest.memo}</span>
               </div>
+              <div class="payment-item" style="background: #d4edda; padding: 10px; border-radius: 5px; border: none;">
+                <span class="payment-label">가스비:</span>
+                <span class="payment-value" style="color: #155724; font-weight: bold;">받는 쪽에서 대납 ✅</span>
+              </div>
             </div>
             <div class="info">
               <strong>🔧 테스트넷 (Sepolia)</strong><br>
               이 QR 코드를 스캔하여 테스트넷에서 결제를 진행할 수 있습니다.<br>
+              <strong style="color: #28a745;">💚 가스비는 받는 쪽에서 대납하므로 보내는 분은 ETH가 없어도 됩니다!</strong><br>
               <small>⚠️ 실제 자금이 아닌 테스트 토큰만 사용하세요!</small>
             </div>
             <button class="refresh-btn" onclick="location.reload()">새로고침</button>

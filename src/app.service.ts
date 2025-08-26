@@ -9,6 +9,7 @@ export class AppService {
   private readonly logger = new Logger('AppService');
 
   private provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+  // ⭐ 가스비 대납자(Sponsor/Relayer): 받는 쪽에서 트랜잭션 가스비를 대신 지불
   private relayer  = new ethers.Wallet(process.env.SPONSOR_PK!, this.provider);
 
   private readonly DELEGATE_ABI = [
@@ -90,6 +91,10 @@ export class AppService {
   async payment(body: any) {
     const { authority, transfer, domain, types, signature712, authorization } = body ?? {};
     this.logger.debug(`[ADDRESS_DEBUG] authority=${authority}`);
+    
+    // ⭐ 가스비 대납 정보 로깅
+    this.logger.log(`[GAS_SPONSOR] 가스비 대납자: ${this.relayer.address}`);
+    this.logger.log(`[GAS_SPONSOR] 보내는 사람(${authority})은 가스비를 지불하지 않습니다.`);
 
     if (!this.isAddr(authority)) throw new BadRequestException('authority invalid');
     if (!transfer) throw new BadRequestException('transfer missing');
@@ -212,6 +217,7 @@ export class AppService {
     }
 
     // send
+    this.logger.log(`[GAS_SPONSOR] 가스비 대납 트랜잭션 전송 중...`);
     const tx = await this.relayer.sendTransaction({
       to: authority,
       data: calldata,
@@ -219,13 +225,35 @@ export class AppService {
       authorizationList: authList as any,
     });
 
+    // 가스비 대납 결과 로깅
+    let gasUsed: bigint | undefined;
+    let gasPrice: bigint | undefined;
+    
     try {
       const rc = await tx.wait();
+      gasUsed = rc?.gasUsed;
+      gasPrice = rc?.gasPrice;
+      
+      const gasCost = gasUsed && gasPrice ? gasUsed * gasPrice : undefined;
+      
       this.logger.log(`[mined] status=${rc?.status} gasUsed=${rc?.gasUsed?.toString()}`);
+      
+      // ⭐ 가스비 대납 상세 정보
+      if (gasCost) {
+        const gasCostEth = ethers.formatEther(gasCost);
+        this.logger.log(`[GAS_SPONSOR] 대납된 가스비: ${gasCostEth} ETH`);
+        this.logger.log(`[GAS_SPONSOR] 대납자 주소: ${this.relayer.address}`);
+      }
     } catch (e:any) {
       this.logger.warn(`[wait] ${e?.message || e}`);
     }
 
-    return { status: 'ok', txHash: tx.hash };
+    return { 
+      status: 'ok', 
+      txHash: tx.hash,
+      gasSponsor: this.relayer.address,
+      gasSponsorshipEnabled: true,
+      message: '가스비가 받는 쪽에서 대납되었습니다.'
+    };
   }
 }

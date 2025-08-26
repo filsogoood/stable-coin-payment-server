@@ -1,3 +1,19 @@
+/**
+ * 가스비 대납(Gas Sponsorship) 클라이언트
+ * 
+ * 이 클라이언트는 서명만 생성하고, 실제 트랜잭션 실행과 가스비 지불은
+ * 서버의 SPONSOR_PK (받는 쪽)에서 대납합니다.
+ * 
+ * 동작 방식:
+ * 1. 클라이언트: EIP-712 서명만 생성 (가스비 지불 X)
+ * 2. 서버: SPONSOR_PK를 사용하여 트랜잭션 실행 및 가스비 대납
+ * 
+ * 장점:
+ * - 사용자는 ETH 잔액이 없어도 토큰 전송 가능
+ * - 사용자 경험 개선 (가스비 걱정 없음)
+ * - 받는 쪽에서 가스비 비용 통제 가능
+ */
+
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -95,8 +111,12 @@ async function ensureAuthorization(
 
 async function main() {
   const provider    = new ethers.JsonRpcProvider(RPC_URL);
-  const firstSigner = new ethers.Wallet(AUTHORITY_PK, provider);
+  const firstSigner = new ethers.Wallet(AUTHORITY_PK, provider);  // 서명만 하는 지갑
   const authority   = firstSigner.address;
+
+  console.log('🚀 가스비 대납 모드로 결제 시작');
+  console.log(`📝 서명자 주소: ${authority}`);
+  console.log('💰 가스비는 서버(받는 쪽)에서 대납합니다');
 
   const net = await provider.getNetwork();
   if (Number(net.chainId) !== CHAIN_ID) {
@@ -146,6 +166,7 @@ async function main() {
   const signature712 = await firstSigner.signTypedData(domain as any, types as any, t as any);
 
   // 4) 서버로 전송 (BigInt → 문자열)
+  console.log('📤 서버로 서명 전송 중... (트랜잭션은 서버에서 실행)');
   const body = {
     authority,
     transfer: {
@@ -163,7 +184,15 @@ async function main() {
   };
 
   const res = await axios.post(`${SERVER_URL}/payment`, body);
-  console.log('server:', res.data);
+  console.log('✅ 결과:', res.data);
+  
+  if (res.data.gasSponsor) {
+    console.log(`⛽ 가스비 대납자: ${res.data.gasSponsor}`);
+    console.log('💚 가스비가 성공적으로 대납되었습니다!');
+  }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { 
+  console.error('❌ 오류 발생:', e); 
+  process.exit(1); 
+});
