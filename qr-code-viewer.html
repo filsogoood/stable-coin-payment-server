@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ethereum QR Code</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .qr-container {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        #qrCode {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+        }
+        
+        .loading {
+            color: #666;
+            font-size: 18px;
+            padding: 50px;
+        }
+        
+        .info-section {
+            background: #f1f3f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .info-title {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .info-label {
+            color: #868e96;
+        }
+        
+        .info-value {
+            color: #212529;
+            word-break: break-all;
+            text-align: right;
+            max-width: 60%;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .network-badge {
+            display: inline-block;
+            background: #e7f5ff;
+            color: #1971c2;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦊 QR Code</h1>
+        
+        <div class="qr-container">
+            <div id="qrLoading" class="loading">QR 코드 생성 중...</div>
+            <img id="qrCode" style="display: none;" alt="QR Code">
+        </div>
+        
+        <div id="infoSection" class="info-section" style="display: none;">
+            <div class="info-title">전송 정보</div>
+            <div class="info-item">
+                <span class="info-label">네트워크:</span>
+                <span class="network-badge" id="networkName">Sepolia Testnet</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">받는 주소:</span>
+                <span class="info-value" id="recipientAddress"></span>
+            </div>
+            <div class="info-item" id="amountItem" style="display: none;">
+                <span class="info-label">금액:</span>
+                <span class="info-value" id="amount"></span>
+            </div>
+            <div class="info-item" id="tokenItem" style="display: none;">
+                <span class="info-label">토큰 주소:</span>
+                <span class="info-value" id="tokenAddress"></span>
+            </div>
+        </div>
+        
+        <div id="errorMessage" class="error" style="display: none;"></div>
+        
+        <button class="refresh-btn" onclick="loadQRCode()">QR 코드 새로고침</button>
+    </div>
+    
+    <script>
+        async function loadQRCode() {
+            const qrLoading = document.getElementById('qrLoading');
+            const qrCode = document.getElementById('qrCode');
+            const infoSection = document.getElementById('infoSection');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            // 초기화
+            qrLoading.style.display = 'block';
+            qrCode.style.display = 'none';
+            infoSection.style.display = 'none';
+            errorMessage.style.display = 'none';
+            
+            try {
+                // URL 파라미터 읽기
+                const urlParams = new URLSearchParams(window.location.search);
+                const address = urlParams.get('address');
+                const amount = urlParams.get('amount');
+                const token = urlParams.get('token');
+                
+                // QR 코드 생성 API 호출
+                let apiUrl = 'http://127.0.0.1:4123/qr-code';
+                const params = [];
+                if (address) params.push(`address=${encodeURIComponent(address)}`);
+                if (amount) params.push(`amount=${encodeURIComponent(amount)}`);
+                if (token) params.push(`token=${encodeURIComponent(token)}`);
+                
+                if (params.length > 0) {
+                    apiUrl += '?' + params.join('&');
+                }
+                
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // QR 코드 표시
+                qrCode.src = data.qrCode;
+                qrCode.style.display = 'block';
+                qrLoading.style.display = 'none';
+                
+                // 정보 표시
+                document.getElementById('networkName').textContent = data.chainName;
+                document.getElementById('recipientAddress').textContent = 
+                    data.recipientAddress.slice(0, 8) + '...' + data.recipientAddress.slice(-6);
+                
+                if (data.amount && data.amount !== '0') {
+                    document.getElementById('amountItem').style.display = 'flex';
+                    const ethAmount = (BigInt(data.amount) / BigInt(10 ** 18)).toString();
+                    const decimals = (BigInt(data.amount) % BigInt(10 ** 18)).toString().padStart(18, '0').slice(0, 4);
+                    document.getElementById('amount').textContent = `${ethAmount}.${decimals} ${data.tokenAddress ? 'Tokens' : 'ETH'}`;
+                }
+                
+                if (data.tokenAddress) {
+                    document.getElementById('tokenItem').style.display = 'flex';
+                    document.getElementById('tokenAddress').textContent = 
+                        data.tokenAddress.slice(0, 8) + '...' + data.tokenAddress.slice(-6);
+                }
+                
+                infoSection.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading QR code:', error);
+                qrLoading.style.display = 'none';
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = `오류: ${error.message}. 서버가 실행 중인지 확인하세요.`;
+            }
+        }
+        
+        // 페이지 로드 시 QR 코드 생성
+        window.addEventListener('DOMContentLoaded', loadQRCode);
+    </script>
+</body>
+</html>
