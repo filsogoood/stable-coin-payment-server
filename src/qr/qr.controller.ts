@@ -255,16 +255,16 @@ export class QrController {
             
             <div class="status" id="statusSection">
               <div class="loading"></div>
-              <div class="status-text">결제 준비 중...</div>
+              <div class="status-text">Metamask 연결 중...</div>
             </div>
             
             <div class="success" id="successSection">
               <div class="success-icon">✅</div>
               <h2>결제 성공!</h2>
-              <p>트랜잭션이 성공적으로 전송되었습니다.</p>
+              <p>Metamask를 통해 트랜잭션이 성공적으로 전송되었습니다.</p>
               <div class="tx-hash" id="txHash"></div>
               <div class="gas-sponsor-badge">
-                ⛽ 가스비가 받는 쪽에서 대납되었습니다
+                🦊 Metamask 지갑을 통해 결제되었습니다
               </div>
             </div>
             
@@ -275,10 +275,13 @@ export class QrController {
             </div>
             
             <div class="manual-section" id="manualSection">
-              <h3>수동 결제 정보 입력</h3>
+              <h3>⚠️ Metamask 연결 실패</h3>
+              <p style="color: #6c757d; font-size: 14px; margin-bottom: 15px;">
+                Metamask 지갑 연결에 실패했습니다. 아래 방법으로 수동 결제가 가능합니다:
+              </p>
               <input type="text" id="privateKey" placeholder="개인키 입력 (0x로 시작)" />
               <input type="text" id="delegateAddress" placeholder="Delegate 주소 (선택사항)" />
-              <button onclick="executeManualPayment()">결제 실행</button>
+              <button onclick="executeManualPayment()">수동 결제 실행</button>
             </div>
           </div>
           
@@ -286,24 +289,409 @@ export class QrController {
             const paymentInfo = ${JSON.stringify(paymentInfo)};
             const serverUrl = window.location.origin;
             
-            // 자동 결제 실행 시도
+            // 디버깅을 위한 결제 정보 출력
+            console.log('결제 정보:', paymentInfo);
+            console.log('토큰 정보:', paymentInfo.token);
+            console.log('토큰이 ETH인가?', paymentInfo.token === 'ETH');
+            console.log('토큰이 비어있나?', !paymentInfo.token);
+            
+            // 연결 요청 진행 상태 플래그
+            let isConnecting = false;
+            
+            // Metamask 자동 연결 및 결제 실행
             async function autoExecutePayment() {
               const statusText = document.querySelector('.status-text');
               
+              // 이미 연결 시도 중이면 중복 실행 방지
+              if (isConnecting) {
+                console.log('이미 연결 시도 중입니다.');
+                return;
+              }
+              
               try {
-                // 환경변수에서 설정된 정보로 시도 (서버 사이드)
-                statusText.textContent = '환경 설정 확인 중...';
+                isConnecting = true;
                 
-                // 클라이언트 사이드에서는 수동 입력 필요
-                setTimeout(() => {
-                  statusText.textContent = '결제 정보 입력이 필요합니다';
-                  document.getElementById('manualSection').style.display = 'block';
-                  document.getElementById('statusSection').style.display = 'none';
-                }, 2000);
+                // Metamask 설치 확인
+                statusText.textContent = 'Metamask 확인 중...';
+                
+                if (typeof window.ethereum === 'undefined') {
+                  throw new Error('Metamask가 설치되어 있지 않습니다. Metamask를 설치해주세요.');
+                }
+                
+                // 먼저 이미 연결된 계정이 있는지 확인
+                statusText.textContent = '연결된 계정 확인 중...';
+                let accounts = [];
+                
+                try {
+                  accounts = await window.ethereum.request({ 
+                    method: 'eth_accounts' 
+                  });
+                } catch (error) {
+                  console.log('계정 확인 중 오류:', error);
+                }
+                
+                // 연결된 계정이 없는 경우에만 권한 요청
+                if (accounts.length === 0) {
+                  statusText.textContent = 'Metamask 연결 요청 중...';
+                  
+                  try {
+                    accounts = await window.ethereum.request({ 
+                      method: 'eth_requestAccounts' 
+                    });
+                  } catch (connectError) {
+                    if (connectError.code === 4001) {
+                      throw new Error('사용자가 Metamask 연결을 거부했습니다.');
+                    } else if (connectError.code === -32002) {
+                      throw new Error('이미 Metamask 연결 요청이 진행 중입니다. 잠시 후 다시 시도해주세요.');
+                    } else {
+                      throw new Error(\`Metamask 연결 실패: \${connectError.message}\`);
+                    }
+                  }
+                }
+                
+                if (accounts.length === 0) {
+                  throw new Error('Metamask에서 계정이 선택되지 않았습니다.');
+                }
+                
+                const userAddress = accounts[0];
+                console.log('연결된 지갑 주소:', userAddress);
+                
+                // 잠깐 대기 (Metamask 상태 안정화)
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // 네트워크 확인 및 변경
+                statusText.textContent = '네트워크 확인 중...';
+                await checkAndSwitchNetwork();
+                
+                // Web3 Provider 초기화
+                statusText.textContent = '트랜잭션 준비 중...';
+                await loadEthersLibrary();
+                
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const signer = await provider.getSigner();
+                
+                // 결제 유형에 따른 트랜잭션 생성
+                console.log('결제 유형 결정 중...');
+                console.log('토큰:', paymentInfo.token);
+                console.log('이더리움 주소 형태인가?', /^0x[a-fA-F0-9]{40}$/.test(paymentInfo.token));
+                
+                if (paymentInfo.token === 'ETH' || !paymentInfo.token) {
+                  console.log('ETH 결제 실행');
+                  await sendETHTransaction(signer);
+                } else if (/^0x[a-fA-F0-9]{40}$/.test(paymentInfo.token)) {
+                  // 올바른 이더리움 주소 형태의 토큰
+                  console.log('ERC-20 토큰 결제 실행:', paymentInfo.token);
+                  
+                  try {
+                    await sendTokenTransaction(signer, paymentInfo.token);
+                  } catch (tokenError) {
+                    console.error('토큰 전송 실패, ETH로 폴백 시도:', tokenError);
+                    
+                    // 토큰 전송 실패 시 ETH로 폴백
+                    if (tokenError.message.includes('존재하지 않습니다') || 
+                        tokenError.message.includes('올바르지 않은') ||
+                        tokenError.message.includes('네트워크 오류') ||
+                        tokenError.message.includes('Internal JSON-RPC error')) {
+                      
+                                             console.log('토큰 결제 실패로 ETH 결제로 전환합니다.');
+                       if (statusText) {
+                         statusText.textContent = '토큰 결제 실패. ETH 결제로 전환 중...';
+                       }
+                       
+                       // 잠시 대기 후 ETH 결제 시도
+                       await new Promise(resolve => setTimeout(resolve, 1000));
+                       await sendETHTransaction(signer);
+                    } else {
+                      // 기타 토큰 전송 오류는 그대로 throw
+                      throw tokenError;
+                    }
+                  }
+                } else {
+                  throw new Error(\`올바르지 않은 토큰 형식입니다: \${paymentInfo.token}\`);
+                }
                 
               } catch (error) {
-                console.error('자동 결제 오류:', error);
+                console.error('Metamask 결제 오류:', error);
                 showError(error.message);
+                
+                // 특정 오류에 대한 재시도 옵션 제공
+                if (error.message.includes('이미 Metamask 연결 요청이 진행')) {
+                  setTimeout(() => {
+                    showRetryOption();
+                  }, 2000);
+                } else {
+                  // 기타 오류 시 수동 입력 옵션 제공
+                  setTimeout(() => {
+                    document.getElementById('manualSection').style.display = 'block';
+                  }, 3000);
+                }
+              } finally {
+                isConnecting = false;
+              }
+            }
+            
+            // 재시도 옵션 표시
+            function showRetryOption() {
+              const errorSection = document.getElementById('errorSection');
+              const errorMessage = document.getElementById('errorMessage');
+              
+              errorMessage.innerHTML = \`
+                Metamask 연결 요청이 이미 진행 중입니다.<br><br>
+                <button onclick="retryConnection()" style="
+                  background: #007bff; 
+                  color: white; 
+                  border: none; 
+                  padding: 10px 20px; 
+                  border-radius: 5px; 
+                  cursor: pointer;
+                  margin-right: 10px;
+                ">다시 시도</button>
+                <button onclick="showManualSection()" style="
+                  background: #6c757d; 
+                  color: white; 
+                  border: none; 
+                  padding: 10px 20px; 
+                  border-radius: 5px; 
+                  cursor: pointer;
+                ">수동 입력</button>
+              \`;
+            }
+            
+            // 연결 재시도
+            async function retryConnection() {
+              document.getElementById('errorSection').style.display = 'none';
+              document.getElementById('statusSection').style.display = 'block';
+              
+              // 잠시 대기 후 재시도
+              setTimeout(() => {
+                autoExecutePayment();
+              }, 1000);
+            }
+            
+            // 수동 입력 섹션 표시
+            function showManualSection() {
+              document.getElementById('errorSection').style.display = 'none';
+              document.getElementById('manualSection').style.display = 'block';
+            }
+            
+            // 네트워크 확인 및 Sepolia로 변경
+            async function checkAndSwitchNetwork() {
+              const currentChainId = await window.ethereum.request({ 
+                method: 'eth_chainId' 
+              });
+              
+              const sepoliaChainId = '0xaa36a7'; // 11155111 in hex
+              
+              if (currentChainId !== sepoliaChainId) {
+                try {
+                  await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: sepoliaChainId }],
+                  });
+                } catch (switchError) {
+                  // 네트워크가 추가되지 않은 경우 추가
+                  if (switchError.code === 4902) {
+                    await window.ethereum.request({
+                      method: 'wallet_addEthereumChain',
+                      params: [{
+                        chainId: sepoliaChainId,
+                        chainName: 'Sepolia Testnet',
+                        nativeCurrency: {
+                          name: 'ETH',
+                          symbol: 'ETH',
+                          decimals: 18,
+                        },
+                        rpcUrls: ['https://sepolia.infura.io/v3/'],
+                        blockExplorerUrls: ['https://sepolia.etherscan.io/'],
+                      }],
+                    });
+                  } else {
+                    throw switchError;
+                  }
+                }
+              }
+            }
+            
+            // ETH 전송 트랜잭션 실행
+            async function sendETHTransaction(signer) {
+              const statusText = document.querySelector('.status-text');
+              
+              try {
+                statusText.textContent = 'ETH 전송을 위해 Metamask에서 승인을 기다리는 중...';
+                
+                const transaction = {
+                  to: paymentInfo.to,
+                  value: ethers.parseEther(paymentInfo.amount),
+                  gasLimit: 21000,
+                };
+                
+                console.log('전송할 ETH 트랜잭션:', transaction);
+                
+                // Metamask에서 트랜잭션 서명 및 전송
+                const txResponse = await signer.sendTransaction(transaction);
+                
+                statusText.textContent = 'ETH 트랜잭션 전송됨. 확인 대기 중...';
+                console.log('트랜잭션 해시:', txResponse.hash);
+                
+                // 트랜잭션 확인 대기
+                const receipt = await txResponse.wait();
+                console.log('트랜잭션 확인됨:', receipt);
+                
+                // 성공 화면 표시
+                showSuccess({
+                  txHash: txResponse.hash,
+                  gasSponsor: 'User (via Metamask)',
+                  status: 'ok',
+                  tokenType: 'ETH'
+                });
+                
+              } catch (error) {
+                if (error.code === 4001) {
+                  throw new Error('사용자가 트랜잭션을 취소했습니다.');
+                } else if (error.code === -32603) {
+                  throw new Error('잔액이 부족합니다. ETH를 충전해주세요.');
+                } else {
+                  throw new Error(\`ETH 전송 실패: \${error.message}\`);
+                }
+              }
+            }
+            
+            // ERC-20 토큰 전송 트랜잭션 실행
+            async function sendTokenTransaction(signer, tokenAddress) {
+              const statusText = document.querySelector('.status-text');
+              
+              try {
+                statusText.textContent = '토큰 컨트랙트 확인 중...';
+                
+                // 토큰 주소 유효성 검사
+                if (!tokenAddress || !ethers.isAddress(tokenAddress)) {
+                  throw new Error(\`올바르지 않은 토큰 주소입니다: \${tokenAddress}\`);
+                }
+                
+                console.log('토큰 컨트랙트 주소:', tokenAddress);
+                
+                // ERC-20 토큰 컨트랙트 ABI (필수 함수들)
+                const tokenABI = [
+                  "function transfer(address to, uint256 amount) returns (bool)",
+                  "function decimals() view returns (uint8)",
+                  "function symbol() view returns (string)",
+                  "function balanceOf(address owner) view returns (uint256)"
+                ];
+                
+                // 토큰 컨트랙트 인스턴스 생성
+                const tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
+                
+                // 토큰 정보 조회 및 컨트랙트 존재 여부 확인
+                statusText.textContent = '토큰 정보 확인 중...';
+                let decimals = 18; // 기본값
+                let symbol = 'TOKEN';
+                
+                try {
+                  // 토큰 컨트랙트가 존재하는지 확인
+                  const provider = signer.provider;
+                  const code = await provider.getCode(tokenAddress);
+                  
+                  if (code === '0x') {
+                    throw new Error('토큰 컨트랙트가 존재하지 않습니다. 올바른 토큰 주소인지 확인해주세요.');
+                  }
+                  
+                  // 병렬로 토큰 정보 조회
+                  const [tokenDecimals, tokenSymbol] = await Promise.all([
+                    tokenContract.decimals().catch(() => 18), // 실패 시 기본값
+                    tokenContract.symbol().catch(() => 'TOKEN') // 실패 시 기본값
+                  ]);
+                  
+                  decimals = tokenDecimals;
+                  symbol = tokenSymbol;
+                  
+                  console.log(\`토큰 정보: \${symbol}, decimals: \${decimals}\`);
+                  
+                } catch (infoError) {
+                  console.log('토큰 정보 조회 실패:', infoError);
+                  
+                  // 토큰 컨트랙트가 존재하지 않는 경우
+                  if (infoError.message.includes('존재하지 않습니다')) {
+                    throw infoError;
+                  }
+                  
+                  // 기타 정보 조회 실패는 기본값으로 진행
+                  console.log('기본값으로 진행합니다.');
+                }
+                
+                // 사용자 토큰 잔액 확인
+                statusText.textContent = '토큰 잔액 확인 중...';
+                try {
+                  const userAddress = await signer.getAddress();
+                  const balance = await tokenContract.balanceOf(userAddress);
+                  const tokenAmount = ethers.parseUnits(paymentInfo.amount, decimals);
+                  
+                  console.log(\`사용자 주소: \${userAddress}\`);
+                  console.log(\`토큰 잔액: \${ethers.formatUnits(balance, decimals)} \${symbol}\`);
+                  console.log(\`전송 요청량: \${paymentInfo.amount} \${symbol}\`);
+                  
+                  if (balance < tokenAmount) {
+                    throw new Error(\`토큰 잔액이 부족합니다. 보유량: \${ethers.formatUnits(balance, decimals)} \${symbol}, 필요량: \${paymentInfo.amount} \${symbol}\`);
+                  }
+                  
+                } catch (balanceError) {
+                  console.log('잔액 확인 실패:', balanceError);
+                  if (balanceError.message.includes('토큰 잔액이 부족합니다')) {
+                    throw balanceError;
+                  }
+                  // 잔액 확인 실패는 무시하고 진행
+                }
+                
+                statusText.textContent = '토큰 전송을 위해 Metamask에서 승인을 기다리는 중...';
+                
+                // 토큰 양 계산 (decimals 고려)
+                const tokenAmount = ethers.parseUnits(paymentInfo.amount, decimals);
+                console.log(\`전송할 토큰 양: \${paymentInfo.amount} \${symbol} = \${tokenAmount.toString()} wei\`);
+                
+                // 토큰 전송 트랜잭션 실행
+                const txResponse = await tokenContract.transfer(paymentInfo.to, tokenAmount);
+                
+                statusText.textContent = '토큰 트랜잭션 전송됨. 확인 대기 중...';
+                console.log('토큰 전송 트랜잭션 해시:', txResponse.hash);
+                
+                // 트랜잭션 확인 대기
+                const receipt = await txResponse.wait();
+                console.log('토큰 전송 트랜잭션 확인됨:', receipt);
+                
+                // 성공 화면 표시
+                showSuccess({
+                  txHash: txResponse.hash,
+                  gasSponsor: 'User (via Metamask)',
+                  status: 'ok',
+                  tokenType: symbol,
+                  tokenAddress: tokenAddress
+                });
+                
+              } catch (error) {
+                console.error('토큰 전송 상세 오류:', error);
+                
+                // 구체적인 에러 처리
+                if (error.code === 4001) {
+                  throw new Error('사용자가 토큰 전송을 취소했습니다.');
+                } else if (error.code === -32603) {
+                  // JSON-RPC 에러 - 더 구체적인 메시지
+                  if (error.message.includes('execution reverted')) {
+                    throw new Error('토큰 전송이 실패했습니다. 토큰 잔액이나 컨트랙트 상태를 확인해주세요.');
+                  } else {
+                    throw new Error('블록체인 네트워크 오류가 발생했습니다. 네트워크 연결을 확인해주세요.');
+                  }
+                } else if (error.code === -32602) {
+                  throw new Error('잘못된 매개변수입니다. 토큰 주소나 금액을 확인해주세요.');
+                } else if (error.message.includes('insufficient allowance')) {
+                  throw new Error('토큰 사용 승인(allowance)이 부족합니다.');
+                } else if (error.message.includes('transfer amount exceeds balance')) {
+                  throw new Error('보유한 토큰 양이 부족합니다.');
+                } else if (error.message.includes('존재하지 않습니다')) {
+                  throw new Error(\`\${error.message} ETH 결제로 전환하려면 페이지를 새로고침하고 다시 시도해주세요.\`);
+                } else if (error.message.includes('토큰 잔액이 부족합니다')) {
+                  throw error; // 이미 구체적인 메시지
+                } else {
+                  throw new Error(\`토큰 전송 실패: \${error.message || '알 수 없는 오류가 발생했습니다.'}\`);
+                }
               }
             }
             
@@ -436,10 +824,22 @@ export class QrController {
             function showSuccess(result) {
               document.getElementById('statusSection').style.display = 'none';
               document.getElementById('successSection').style.display = 'block';
+              
+              let tokenInfo = '';
+              if (result.tokenType && result.tokenType !== 'ETH') {
+                tokenInfo = \`<strong>토큰:</strong> \${result.tokenType}<br>\`;
+                if (result.tokenAddress) {
+                  tokenInfo += \`<strong>토큰 주소:</strong> \${result.tokenAddress}<br>\`;
+                }
+              }
+              
               document.getElementById('txHash').innerHTML = \`
                 <strong>트랜잭션 해시:</strong><br>
-                <a href="https://sepolia.etherscan.io/tx/\${result.txHash}" target="_blank">\${result.txHash}</a><br><br>
-                <strong>가스비 대납자:</strong> \${result.gasSponsor}
+                <a href="https://sepolia.etherscan.io/tx/\${result.txHash}" target="_blank" style="color: #007bff; text-decoration: none;">\${result.txHash}</a><br><br>
+                <strong>결제 유형:</strong> \${result.tokenType || 'ETH'}<br>
+                \${tokenInfo}
+                <strong>결제 방식:</strong> Metamask 지갑<br>
+                <strong>네트워크:</strong> Sepolia Testnet
               \`;
             }
             
@@ -688,9 +1088,10 @@ export class QrController {
             
             <div class="highlight-box">
               <h3>📱 사용 방법</h3>
-              <p>1. 모바일 기기로 QR 코드를 스캔합니다</p>
+              <p>1. Metamask 앱에서 QR 코드를 스캔합니다</p>
               <p>2. 자동으로 결제 실행 페이지로 이동합니다</p>
-              <p>3. 개인키를 입력하여 결제를 완료합니다</p>
+              <p>3. Metamask 지갑이 자동으로 연결되어 결제가 진행됩니다</p>
+              <p>4. Metamask에서 트랜잭션을 승인하면 결제가 완료됩니다</p>
             </div>
             
             <div class="payment-info">
@@ -715,9 +1116,9 @@ export class QrController {
                 <span class="payment-label">메모:</span>
                 <span class="payment-value">${paymentRequest.memo}</span>
               </div>
-              <div class="payment-item" style="background: #d4edda; padding: 10px; border-radius: 5px; border: none;">
-                <span class="payment-label">가스비:</span>
-                <span class="payment-value" style="color: #155724; font-weight: bold;">받는 쪽에서 대납 ✅</span>
+              <div class="payment-item" style="background: #e7f3ff; padding: 10px; border-radius: 5px; border: none;">
+                <span class="payment-label">결제 방식:</span>
+                <span class="payment-value" style="color: #0066cc; font-weight: bold;">Metamask 자동 연결 🦊</span>
               </div>
             </div>
             
@@ -729,7 +1130,8 @@ export class QrController {
               <strong>⚠️ 주의사항</strong><br>
               • 이것은 테스트넷(Sepolia)용 QR 코드입니다<br>
               • 실제 자금이 아닌 테스트 토큰만 사용하세요<br>
-              • 개인키는 안전하게 보관하세요
+              • Metamask 지갑에 충분한 Sepolia ETH가 있어야 합니다<br>
+              • QR 코드 스캔 전에 Metamask 앱이 설치되어 있어야 합니다
             </div>
           </div>
         </body>

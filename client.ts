@@ -111,7 +111,7 @@ async function ensureAuthorization(
 
 async function main() {
   const provider    = new ethers.JsonRpcProvider(RPC_URL);
-  const firstSigner = new ethers.Wallet(AUTHORITY_PK, provider);  // 서명만 하는 지갑
+  const firstSigner = new ethers.Wallet(AUTHORITY_PK, provider);  // 서명만 하는 지갑 //MetaMask 랑 연결 (사용자지갑의 객체)
   const authority   = firstSigner.address;
 
   console.log('🚀 가스비 대납 모드로 결제 시작');
