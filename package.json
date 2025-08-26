@@ -20,15 +20,17 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@metamask/delegation-toolkit": "^0.13.0-rc.3",
+    "@metamask/sdk": "^0.33.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "axios": "^1.11.0",
     "better-sqlite3": "^12.2.0",
     "dotenv": "^17.2.1",
-    "ethers": "^6.15.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "viem": "^2.21.55"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

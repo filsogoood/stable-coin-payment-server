@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StableCoin Payment</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .payment-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+        .info-label {
+            font-weight: bold;
+            min-width: 80px;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        .connect-btn {
+            background: #ff6b35;
+            color: white;
+        }
+        .connect-btn:hover {
+            background: #e55a2e;
+        }        .pay-btn {
+            background: #28a745;
+            color: white;
+        }
+        .pay-btn:hover {
+            background: #218838;
+        }
+        .pay-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f1b0b7;
+        }
+        .status.info {
+            background: #cce7ff;
+            color: #004085;
+            border: 1px solid #b3d7ff;        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        .loading {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .mobile-connect {
+            background: #6c46fe;
+            color: white;
+            margin-top: 10px;
+        }
+        .mobile-connect:hover {
+            background: #5a3ad3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🪙 StableCoin Payment</h1>
+            <p>MetaMask를 사용하여 안전하게 결제하세요</p>
+        </div>
+
+        <div class="payment-info">
+            <h3>결제 정보</h3>
+            <div class="info-row">                <span class="info-label">토큰:</span>
+                <span id="tokenAddress">{{TOKEN_ADDRESS}}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">받는주소:</span>
+                <span id="toAddress">{{TO_ADDRESS}}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">금액:</span>
+                <span id="amount">{{AMOUNT}}</span>
+            </div>
+        </div>
+
+        <button id="connectBtn" class="connect-btn">MetaMask 연결</button>
+        <button id="mobileConnectBtn" class="mobile-connect" style="display: none;">MetaMask 앱으로 열기</button>
+        <button id="payBtn" class="pay-btn" disabled>결제하기</button>
+
+        <div id="status"></div>
+        <div id="loading" class="loading" style="display: none;">
+            처리 중입니다...
+        </div>
+    </div>
+
+    <!-- MetaMask SDK 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/@metamask/sdk@0.28.4/dist/browser/sdk.js"></script>
+    
+    <script>
+        // 서버에서 주입될 설정값들
+        const CHAIN_ID = {{CHAIN_ID}};
+        const DELEGATE_ADDRESS = "{{DELEGATE_ADDRESS}}";
+        const SERVER_URL = "{{SERVER_URL}}";
+        
+        let sdk = null;
+        let userAccount = null;
+        let ethereum = null;
+
+        // DOM 요소들
+        const connectBtn = document.getElementById('connectBtn');
+        const mobileConnectBtn = document.getElementById('mobileConnectBtn');
+        const payBtn = document.getElementById('payBtn');
+        const statusDiv = document.getElementById('status');
+        const loadingDiv = document.getElementById('loading');
+
+        // URL 파라미터에서 결제 정보 가져오기
+        const urlParams = new URLSearchParams(window.location.search);
+        const paymentInfo = {
+            token: urlParams.get('token') || document.getElementById('tokenAddress').innerText,
+            to: urlParams.get('to') || document.getElementById('toAddress').innerText,
+            amount: urlParams.get('amount') || document.getElementById('amount').innerText
+        };
+
+        // 모바일 체크
+        function isMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+
+        // MetaMask 모바일 브라우저 체크
+        function isMetaMaskMobile() {
+            return window.ethereum && window.ethereum.isMetaMask && isMobile();
+        }
+
+        // MetaMask 연결
+        async function connectMetaMask() {            try {
+                showLoading(true);
+                
+                // MetaMask가 없으면 모바일에서는 딥링크로 연결
+                if (typeof window.ethereum === 'undefined') {
+                    if (isMobile()) {
+                        showStatus('MetaMask 앱으로 이동합니다...', 'info');
+                        const deepLink = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}${window.location.search}`;
+                        window.location.href = deepLink;
+                        return;
+                    }
+                    showStatus('MetaMask가 설치되어 있지 않습니다. 브라우저 익스텐션을 설치해주세요.', 'error');
+                    showLoading(false);
+                    return;
+                }
+
+                ethereum = window.ethereum;
+                
+                // 계정 연결 요청
+                const accounts = await ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                
+                if (!accounts || accounts.length === 0) {
+                    throw new Error('계정을 선택해주세요.');
+                }
+                
+                userAccount = accounts[0];
+                
+                // 네트워크 확인                const chainIdHex = await ethereum.request({ 
+                    method: 'eth_chainId' 
+                });
+                const currentChainId = parseInt(chainIdHex, 16);
+                
+                if (currentChainId !== CHAIN_ID) {
+                    showStatus(`네트워크를 변경해주세요. 현재: ${currentChainId}, 필요: ${CHAIN_ID}`, 'warning');
+                    
+                    // 네트워크 변경 시도
+                    try {
+                        await ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x' + CHAIN_ID.toString(16) }],
+                        });
+                    } catch (switchError) {
+                        console.error('Network switch failed:', switchError);
+                        showLoading(false);
+                        return;
+                    }
+                }
+                
+                connectBtn.textContent = '연결됨: ' + userAccount.slice(0,6) + '...' + userAccount.slice(-4);
+                connectBtn.disabled = true;
+                payBtn.disabled = false;
+                
+                showStatus('MetaMask 연결이 완료되었습니다.', 'success');
+                showLoading(false);
+                
+            } catch (error) {
+                console.error('Connection error:', error);
+                showStatus('연결 실패: ' + error.message, 'error');                showLoading(false);
+            }
+        }
+
+        // 결제 처리
+        async function processPayment() {
+            try {
+                if (!ethereum || !userAccount) {
+                    showStatus('먼저 MetaMask를 연결해주세요.', 'error');
+                    return;
+                }
+
+                showLoading(true);
+                showStatus('결제를 처리하고 있습니다...', 'info');
+
+                // 1. EIP-712 도메인과 타입 정의 (client.ts와 동일하게)
+                const domain = {
+                    name: 'DelegatedTransfer',
+                    version: '1',
+                    chainId: CHAIN_ID,
+                    verifyingContract: DELEGATE_ADDRESS  // 위임된 컨트랙트 주소 (EIP-7702 요구사항)
+                };
+
+                const types = {
+                    Transfer: [
+                        { name: 'from', type: 'address' },
+                        { name: 'token', type: 'address' },
+                        { name: 'to', type: 'address' },
+                        { name: 'amount', type: 'uint256' },
+                        { name: 'nonce', type: 'uint256' },
+                        { name: 'deadline', type: 'uint256' }                    ]
+                };
+
+                // 2. nonce 가져오기
+                let nextNonce = '0';
+                try {
+                    // storage slot 0 읽기
+                    const raw = await ethereum.request({
+                        method: 'eth_getStorageAt',
+                        params: [userAccount, '0x0', 'latest']
+                    });
+                    if (raw && raw !== '0x0') {
+                        nextNonce = parseInt(raw, 16).toString();
+                    }
+                } catch (e) {
+                    console.log('Using default nonce 0');
+                }
+
+                // 3. Transfer 메시지 생성
+                const deadline = Math.floor(Date.now() / 1000) + 300; // 5분
+                const message = {
+                    from: userAccount,
+                    token: paymentInfo.token,
+                    to: paymentInfo.to,
+                    amount: paymentInfo.amount,
+                    nonce: nextNonce,
+                    deadline: deadline.toString()
+                };
+
+                console.log('Signing message:', message);
+
+                // 4. EIP-712 서명 요청                const signature712 = await ethereum.request({
+                    method: 'eth_signTypedData_v4',
+                    params: [
+                        userAccount,
+                        JSON.stringify({
+                            domain,
+                            types,
+                            primaryType: 'Transfer',
+                            message
+                        })
+                    ]
+                });
+
+                console.log('Signature obtained:', signature712);
+
+                // 5. Authorization 생성 (EIP-7702) - 브라우저에서는 계산만 수행
+                let authorization = null;
+                if (DELEGATE_ADDRESS) {
+                    try {
+                        const eoaNonce = await ethereum.request({
+                            method: 'eth_getTransactionCount',
+                            params: [userAccount, 'latest']
+                        });
+                        
+                        // 서버에서 authorization 서명을 처리하도록 데이터만 전송
+                        authorization = {
+                            chainId: Number(CHAIN_ID),
+                            address: DELEGATE_ADDRESS,
+                            nonce: Number(eoaNonce),
+                            signature: null // 서버에서 생성되도록 함
+                        };
+                        
+                        console.log('Authorization data prepared for server:', authorization);
+                    } catch (e) {
+                        console.log('Authorization preparation failed:', e);
+                        authorization = null;
+                    }
+                }
+
+                // 6. 서버로 결제 요청
+                const body = {
+                    authority: userAccount,
+                    transfer: message,
+                    domain,
+                    types,
+                    signature712,
+                    authorization
+                };
+
+                console.log('Sending to server:', body);
+
+                const response = await fetch(SERVER_URL + '/payment', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'ok') {
+                    showStatus('결제가 완료되었습니다! 트랜잭션: ' + result.txHash, 'success');
+                } else {
+                    throw new Error(result.message || '결제에 실패했습니다.');
+                }
+            } catch (error) {
+                console.error('Payment error:', error);
+                showStatus('결제 실패: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // 이벤트 리스너
+        connectBtn.addEventListener('click', connectMetaMask);
+        payBtn.addEventListener('click', processPayment);
+        
+        mobileConnectBtn.addEventListener('click', () => {
+            const deepLink = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}${window.location.search}`;
+            window.location.href = deepLink;
+        });
+
+        // 유틸리티 함수들
+        function showStatus(message, type) {
+            statusDiv.innerHTML = message;
+            statusDiv.className = 'status ' + type;
+            statusDiv.style.display = 'block';
+        }
+
+        function showLoading(show) {
+            loadingDiv.style.display = show ? 'block' : 'none';
+        }
+
+        // 페이지 로드시 초기화
+        window.addEventListener('load', () => {            console.log('Page loaded. Checking MetaMask...');
+            
+            // MetaMask 감지
+            if (typeof window.ethereum !== 'undefined' && window.ethereum.isMetaMask) {
+                console.log('MetaMask detected');
+                showStatus('MetaMask가 감지되었습니다. 연결 버튼을 클릭하세요.', 'info');
+                
+                // 계정 변경 감지
+                window.ethereum.on('accountsChanged', (accounts) => {
+                    if (accounts.length === 0) {
+                        connectBtn.textContent = 'MetaMask 연결';
+                        connectBtn.disabled = false;
+                        payBtn.disabled = true;
+                        userAccount = null;
+                        showStatus('MetaMask 연결이 해제되었습니다.', 'warning');
+                    } else if (accounts[0] !== userAccount) {
+                        userAccount = accounts[0];
+                        connectBtn.textContent = '연결됨: ' + userAccount.slice(0,6) + '...' + userAccount.slice(-4);
+                        showStatus('계정이 변경되었습니다.', 'info');
+                    }
+                });
+                
+                // 네트워크 변경 감지
+                window.ethereum.on('chainChanged', (chainId) => {
+                    window.location.reload();
+                });
+                
+            } else if (isMobile()) {
+                console.log('Mobile detected without MetaMask');
+                mobileConnectBtn.style.display = 'block';
+                showStatus('모바일 환경입니다. MetaMask 앱으로 열기 버튼을 클릭하세요.', 'warning');            } else {
+                console.log('MetaMask not detected');
+                showStatus('MetaMask를 설치해주세요. Chrome, Firefox, Edge 브라우저를 지원합니다.', 'error');
+            }
+        });
+
+        // 디버깅용 콘솔 출력
+        console.log('Payment page initialized with config:', {
+            CHAIN_ID,
+            DELEGATE_ADDRESS,
+            SERVER_URL,
+            paymentInfo
+        });
+    </script>
+</body>
+</html>
