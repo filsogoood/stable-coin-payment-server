@@ -81,42 +81,7 @@ export class AppService {
     return out;
   }
 
-  // 환경변수 정보 제공 (개인키 제외)
-  getConfig() {
-    return {
-      serverUrl: process.env.SERVER_URL || `http://localhost:${process.env.PORT || 4123}`,
-      rpcUrl: process.env.RPC_URL,
-      delegateAddress: process.env.DELEGATE_ADDRESS,
-      token: process.env.TOKEN,
-      to: process.env.TO,
-      amountWei: process.env.AMOUNT_WEI,
-      chainId: Number(process.env.CHAIN_ID),
-      // 개인키는 보안상 제공하지 않음
-      hasPrivateKey: !!process.env.PRIVATE_KEY
-    };
-  }
 
-  // 개인키 요청 (보안 검증 포함)
-  getPrivateKey(timestamp: number) {
-    if (!process.env.PRIVATE_KEY) {
-      throw new BadRequestException('개인키가 서버에 설정되지 않았습니다.');
-    }
-
-    // 타임스탬프 검증 (10분 이내의 QR만 허용)
-    const now = Date.now();
-    const maxAge = 10 * 60 * 1000; // 10분
-    
-    if (!timestamp || now - timestamp > maxAge) {
-      throw new BadRequestException('만료된 QR 코드입니다. 새로운 QR을 생성해주세요.');
-    }
-
-    this.logger.log(`[PRIVATE_KEY] QR 타임스탬프 검증 성공: ${new Date(timestamp).toISOString()}`);
-    
-    return {
-      privateKey: process.env.PRIVATE_KEY,
-      timestamp: now
-    };
-  }
 
   // (옵션) 클라이언트가 미리 nextNonce만 요청할 수 있게 제공
   async getNextNonce(authority: string, authorization?: { chainId:number; address:string; nonce:number; signature:Hex }) {
