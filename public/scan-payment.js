@@ -11,15 +11,12 @@ class PaymentScanner {
         this.isScanning = false;
         this.lastScanTime = null;
         this.pauseScanning = false;
-        this.sessionMode = false;
-        this.sessionId = null;
         this.init();
     }
 
     async init() {
         this.bindEvents();
         this.initializeEthers();
-        await this.checkURLSession();
     }
 
     bindEvents() {
@@ -60,66 +57,7 @@ class PaymentScanner {
         this.showStatus('라이브러리 로드 완료. QR 스캔을 시작할 수 있습니다.', 'info');
     }
 
-    // URL 파라미터에서 세션 확인
-    async checkURLSession() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session');
-        
-        if (sessionId) {
-            this.addDebugLog(`🔗 URL에서 세션 ID 발견: ${sessionId}`);
-            this.showStatus('세션 정보를 확인하는 중...', 'info');
-            
-            try {
-                // 백엔드에서 세션 정보 조회
-                const response = await fetch(`/session/${sessionId}`);
-                
-                if (!response.ok) {
-                    throw new Error('세션을 찾을 수 없습니다.');
-                }
-                
-                const sessionData = await response.json();
-                this.addDebugLog(`✅ 세션 정보 조회 성공: ${JSON.stringify(sessionData)}`);
-                
-                // 세션이 유효한 경우 세션 정보 설정
-                this.sessionId = sessionId;
-                
-                // UI 업데이트 - 첫 번째 QR 정보를 표시
-                this.updateUIForSession(sessionData);
-                
-                // 세션 모드 플래그 설정 (자동 카메라 시작 제거)
-                this.sessionMode = true;
-                
-                // 사용자가 수동으로 스캔을 시작하도록 안내
-                this.showStatus('첫 번째 QR 코드 정보가 확인되었습니다. "스캔 시작" 버튼을 눌러 결제정보 QR 코드를 스캔해주세요.', 'success');
-                
-            } catch (error) {
-                this.addDebugLog(`❌ 세션 조회 실패: ${error.message}`);
-                this.showStatus('세션 정보를 찾을 수 없습니다: ' + error.message, 'error');
-            }
-        }
-    }
 
-    // 세션 정보를 위한 UI 업데이트
-    updateUIForSession(sessionData) {
-        // 스캔 안내 메시지 업데이트
-        const scanGuide = document.querySelector('.scan-instruction');
-        if (scanGuide) {
-            scanGuide.textContent = '결제정보 QR 코드를 이 영역에 맞춰주세요';
-        }
-
-        // 정보 섹션에 세션 상태 표시
-        const infoSection = document.querySelector('.info-section');
-        if (infoSection) {
-            const sessionInfo = document.createElement('div');
-            sessionInfo.className = 'status success mt-2';
-            sessionInfo.innerHTML = `
-                <strong>✅ 첫 번째 QR 스캔 완료</strong><br>
-                세션 ID: ${this.sessionId.substring(0, 20)}...<br>
-                이제 결제정보 QR 코드를 스캔해주세요.
-            `;
-            infoSection.insertBefore(sessionInfo, infoSection.firstChild);
-        }
-    }
 
     async startScanner() {
         try {
@@ -443,11 +381,6 @@ class PaymentScanner {
                 this.addDebugLog('🔐 단일 암호화된 QR 코드 처리 시작 - 스캐너 중지');
                 await this.stopScanner();
                 await this.handleEncryptedPayment(qrData);
-            } else if (this.sessionId) {
-                // 세션 ID가 있는 경우 (URL을 통해 들어온 경우) (스캐너 중지)
-                this.addDebugLog('🔗 세션 기반 결제 처리 시작 - 스캐너 중지');
-                await this.stopScanner();
-                await this.handleSessionBasedPayment(qrData);
             } else {
                 // 기존 방식 (단일 QR 코드) (스캐너 중지)
                 this.addDebugLog('💳 단일 QR 기반 결제 처리 시작 - 스캐너 중지');
@@ -599,38 +532,7 @@ class PaymentScanner {
         }
     }
 
-    // 세션 기반 결제 처리 (2단계 QR)
-    async handleSessionBasedPayment(qrData) {
-        try {
-            this.addDebugLog('✅ 결제정보 QR 데이터 파싱 성공');
-            this.addDebugLog(`- 타입: ${qrData.type}`);
-            this.addDebugLog(`- 세션 ID: ${qrData.sessionId}`);
-            this.addDebugLog(`- 금액: ${qrData.amount}`);
-            this.addDebugLog(`- 수신자: ${qrData.recipient}`);
-            
-            // 세션 ID 확인
-            if (qrData.sessionId !== this.sessionId) {
-                throw new Error('세션 ID가 일치하지 않습니다. 올바른 QR 코드를 스캔해주세요.');
-            }
 
-            if (qrData.type !== 'payment_request') {
-                throw new Error('결제정보 QR 코드가 아닙니다. 두 번째 QR 코드를 스캔해주세요.');
-            }
-
-            // 섹션 전환 - 스캔 섹션 숨기고 결제 진행 표시
-            document.getElementById('scannerSection').classList.add('hidden');
-            document.getElementById('paymentProcessing').classList.remove('hidden');
-            
-            this.showStatus('결제정보 QR 코드를 스캔했습니다. 결제를 진행합니다...', 'success');
-            
-            // 백엔드에 세션 기반 결제 요청
-            await this.executeSessionPayment(qrData);
-            
-        } catch (error) {
-            this.addDebugLog(`❌ 세션 기반 결제 처리 실패: ${error.message}`);
-            this.showStatus('결제 처리 실패: ' + error.message, 'error');
-        }
-    }
 
     // 기존 방식 결제 처리 (단일 QR)
     handleDirectPayment(paymentData) {
@@ -682,36 +584,7 @@ class PaymentScanner {
         }
     }
 
-    // 세션 기반 결제 실행
-    async executeSessionPayment(qrData) {
-        try {
-            // 결제 진행 상태 업데이트
-            this.updatePaymentProgress('서버에 세션 기반 가스리스 결제 요청 중...');
-            
-            // 백엔드의 세션 기반 결제 API 호출
-            const response = await fetch('/scan/payment', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(qrData)
-            });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-                throw new Error(errorData.message || `HTTP ${response.status}`);
-            }
-
-            const result = await response.json();
-            
-            // 성공 처리
-            this.handlePaymentSuccess(result);
-
-        } catch (error) {
-            console.error('세션 기반 결제 실행 실패:', error);
-            this.handlePaymentError(error);
-        }
-    }
 
 
 
@@ -842,8 +715,6 @@ class PaymentScanner {
         this.scanAttempts = 0;
         this.lastScanTime = null;
         this.pauseScanning = false;
-        this.sessionMode = false;
-        this.sessionId = null;
         
 
         
