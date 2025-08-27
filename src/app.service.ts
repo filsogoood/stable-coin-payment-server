@@ -1,6 +1,8 @@
 // app.service.ts
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ethers, Interface } from 'ethers';
+import { spawn } from 'child_process';
+import * as path from 'path';
 
 type Hex = `0x${string}`;
 
@@ -77,6 +79,43 @@ export class AppService {
     const out = BigInt(raw || 0);
     this.logger.debug(`[nextNonce:slot0] ${out.toString()}`);
     return out;
+  }
+
+  // 환경변수 정보 제공 (개인키 제외)
+  getConfig() {
+    return {
+      serverUrl: process.env.SERVER_URL || `http://localhost:${process.env.PORT || 4123}`,
+      rpcUrl: process.env.RPC_URL,
+      delegateAddress: process.env.DELEGATE_ADDRESS,
+      token: process.env.TOKEN,
+      to: process.env.TO,
+      amountWei: process.env.AMOUNT_WEI,
+      chainId: Number(process.env.CHAIN_ID),
+      // 개인키는 보안상 제공하지 않음
+      hasPrivateKey: !!process.env.PRIVATE_KEY
+    };
+  }
+
+  // 개인키 요청 (보안 검증 포함)
+  getPrivateKey(timestamp: number) {
+    if (!process.env.PRIVATE_KEY) {
+      throw new BadRequestException('개인키가 서버에 설정되지 않았습니다.');
+    }
+
+    // 타임스탬프 검증 (10분 이내의 QR만 허용)
+    const now = Date.now();
+    const maxAge = 10 * 60 * 1000; // 10분
+    
+    if (!timestamp || now - timestamp > maxAge) {
+      throw new BadRequestException('만료된 QR 코드입니다. 새로운 QR을 생성해주세요.');
+    }
+
+    this.logger.log(`[PRIVATE_KEY] QR 타임스탬프 검증 성공: ${new Date(timestamp).toISOString()}`);
+    
+    return {
+      privateKey: process.env.PRIVATE_KEY,
+      timestamp: now
+    };
   }
 
   // (옵션) 클라이언트가 미리 nextNonce만 요청할 수 있게 제공
@@ -227,5 +266,129 @@ export class AppService {
     }
 
     return { status: 'ok', txHash: tx.hash };
+  }
+
+  // 가스리스 결제 처리 (client.ts 실행)
+  async gaslessPayment(body: any) {
+    const { qrData } = body ?? {};
+    
+    if (!qrData) {
+      throw new BadRequestException('QR 데이터가 없습니다.');
+    }
+
+    // 필수 필드 검증
+    const requiredFields = ['token', 'to', 'amountWei', 'chainId', 'delegateAddress', 'rpcUrl', 'timestamp'];
+    for (const field of requiredFields) {
+      if (!qrData[field]) {
+        throw new BadRequestException(`${field} 필드가 없습니다.`);
+      }
+    }
+
+    // 타임스탬프 검증 (10분 이내)
+    const now = Date.now();
+    const maxAge = 10 * 60 * 1000; // 10분
+    
+    if (now - qrData.timestamp > maxAge) {
+      throw new BadRequestException('만료된 QR 코드입니다. 새로운 QR을 생성해주세요.');
+    }
+
+    this.logger.log(`[GASLESS_PAYMENT] QR 스캔 결제 요청 시작`);
+    
+    // 환경변수 임시 설정
+    const originalEnv = {
+      TOKEN: process.env.TOKEN,
+      TO: process.env.TO,
+      AMOUNT_WEI: process.env.AMOUNT_WEI,
+      CHAIN_ID: process.env.CHAIN_ID,
+      DELEGATE_ADDRESS: process.env.DELEGATE_ADDRESS,
+      RPC_URL: process.env.RPC_URL
+    };
+
+    try {
+      // QR 데이터로 환경변수 임시 변경
+      process.env.TOKEN = qrData.token;
+      process.env.TO = qrData.to;
+      process.env.AMOUNT_WEI = qrData.amountWei;
+      process.env.CHAIN_ID = qrData.chainId.toString();
+      process.env.DELEGATE_ADDRESS = qrData.delegateAddress;
+      process.env.RPC_URL = qrData.rpcUrl;
+
+      // client.ts 실행
+      const clientPath = path.resolve(process.cwd(), 'client.ts');
+      
+      return await new Promise((resolve, reject) => {
+        // Windows 호환성을 위해 shell: true 옵션과 ts-node 사용
+        const clientProcess = spawn('npx', ['ts-node', clientPath], {
+          stdio: ['inherit', 'pipe', 'pipe'],
+          shell: true // Windows에서 npx.cmd를 찾을 수 있도록
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        clientProcess.stdout.on('data', (data) => {
+          const output = data.toString();
+          stdout += output;
+          this.logger.debug(`[CLIENT_OUTPUT] ${output.trim()}`);
+        });
+
+        clientProcess.stderr.on('data', (data) => {
+          const error = data.toString();
+          stderr += error;
+          this.logger.error(`[CLIENT_ERROR] ${error.trim()}`);
+        });
+
+        clientProcess.on('close', (code) => {
+          if (code === 0) {
+            this.logger.log(`[GASLESS_PAYMENT] client.ts 실행 완료`);
+            
+            // stdout에서 결과 파싱 시도
+            try {
+              const lines = stdout.split('\n');
+              for (const line of lines) {
+                if (line.includes('server:') && line.includes('txHash')) {
+                  const jsonMatch = line.match(/server:\s*({.*})/);
+                  if (jsonMatch) {
+                    const result = JSON.parse(jsonMatch[1]);
+                    return resolve(result);
+                  }
+                }
+              }
+              
+              // 기본 성공 응답
+              resolve({ 
+                status: 'ok', 
+                message: '가스리스 결제가 성공적으로 처리되었습니다.',
+                logs: stdout
+              });
+            } catch (e) {
+              resolve({ 
+                status: 'ok', 
+                message: '가스리스 결제가 처리되었습니다.',
+                logs: stdout
+              });
+            }
+          } else {
+            this.logger.error(`[GASLESS_PAYMENT] client.ts 실행 실패, exit code: ${code}`);
+            reject(new BadRequestException(`결제 처리 실패: ${stderr || '알 수 없는 오류'}`));
+          }
+        });
+
+        clientProcess.on('error', (error) => {
+          this.logger.error(`[GASLESS_PAYMENT] client.ts 실행 에러: ${error.message}`);
+          reject(new BadRequestException(`결제 처리 에러: ${error.message}`));
+        });
+      });
+
+    } finally {
+      // 환경변수 복원
+      for (const [key, value] of Object.entries(originalEnv)) {
+        if (value) {
+          process.env[key] = value;
+        } else {
+          delete process.env[key];
+        }
+      }
+    }
   }
 }

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR 코드 생성 - 가스리스 결제</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>QR 코드 생성</h1>
+            <p>결제 정보와 개인키가 포함된 QR 코드를 생성합니다</p>
+        </header>
+
+        <main>
+            <div class="qr-section">
+                <h2>📱 결제 QR 코드</h2>
+                
+                <div class="form-group">
+                    <label for="amount">전송 금액 (WEI)</label>
+                    <input type="text" id="amount" class="form-control" placeholder="기본값: 환경변수에서 로드">
+                </div>
+                
+                <div class="form-group">
+                    <label for="recipient">받는 주소</label>
+                    <input type="text" id="recipient" class="form-control" placeholder="기본값: 환경변수에서 로드">
+                </div>
+                
+                <div class="form-group">
+                    <label for="token">토큰 주소</label>
+                    <input type="text" id="token" class="form-control" placeholder="기본값: 환경변수에서 로드">
+                </div>
+
+                <button id="generateBtn" class="btn btn-primary">
+                    <span id="generateText">QR 코드 생성</span>
+                    <span id="generateLoading" class="loading hidden"></span>
+                </button>
+
+                <div id="status" class="hidden"></div>
+
+                <div class="qr-display" id="qrDisplay">
+                    <div style="color: #999;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">📱</div>
+                        <p>QR 코드 생성 버튼을 클릭하면<br>여기에 QR 코드가 표시됩니다</p>
+                    </div>
+                </div>
+
+                <div id="qrInfo" class="hidden">
+                    <h3>📋 QR 코드 정보</h3>
+                    <div id="qrContent"></div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3>💡 사용 방법</h3>
+                <ol>
+                    <li><strong>환경변수 확인:</strong> 서버의 .env 파일에 설정된 값들이 자동으로 로드됩니다</li>
+                    <li><strong>값 수정 (선택):</strong> 필요한 경우 금액, 받는 주소, 토큰 주소를 수정할 수 있습니다</li>
+                    <li><strong>QR 생성:</strong> "QR 코드 생성" 버튼을 클릭하여 QR 코드를 생성합니다</li>
+                    <li><strong>모바일 스캔:</strong> 생성된 QR 코드를 모바일 기기로 스캔하여 결제를 진행합니다</li>
+                </ol>
+                
+                <div class="status warning mt-3">
+                    <strong>⚠️ 보안 주의사항:</strong><br>
+                    생성된 QR 코드에는 개인키가 포함되어 있습니다. 반드시 신뢰할 수 있는 환경에서만 사용하세요.
+                </div>
+            </div>
+
+            <div class="text-center mt-3">
+                <a href="/" class="btn btn-secondary">홈으로 돌아가기</a>
+                <a href="/scan" class="btn btn-success">QR 스캔하러 가기</a>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 가스리스 결제 시스템</p>
+        </footer>
+    </div>
+
+    <!-- QR 코드 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <!-- 페이지 스크립트 -->
+    <script src="generate.js"></script>
+</body>
+</html>

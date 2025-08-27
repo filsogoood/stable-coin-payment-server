@@ -3,6 +3,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 const envPath = path.resolve(process.cwd(), '.env'); // CWD가 다르면 엉뚱한 .env 읽음
 const parsed = dotenv.parse(fs.readFileSync(envPath));
@@ -15,7 +16,14 @@ for (const k of KEYS) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  await app.listen(process.env.PORT ?? 3000);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  
+  // CORS 설정
+  app.enableCors();
+  
+  // 정적 파일 서빙 설정
+  app.useStaticAssets(path.join(process.cwd(), 'public'));
+  
+  await app.listen(process.env.PORT ?? 4123);
 }
 bootstrap();
