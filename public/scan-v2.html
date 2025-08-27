@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2단계 QR 코드 스캔 - 가스리스 결제</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>2단계 QR 코드 스캔</h1>
+            <p>개인키와 결제정보를 분리하여 안전한 가스리스 결제를 진행합니다</p>
+        </header>
+
+        <main>
+            <!-- 단계 표시기 -->
+            <div class="step-indicator">
+                <h2 id="stepTitle">1️⃣ 개인키 QR 코드 스캔</h2>
+                <p id="stepDescription">빨간색 개인키 QR 코드를 먼저 스캔해주세요</p>
+            </div>
+
+            <div class="qr-section">
+                <h2>📸 QR 코드 스캐너</h2>
+                
+                <div id="scannerSection">
+                    <div class="video-container">
+                        <video id="scanner-video" autoplay muted playsinline></video>
+                        <div class="scanner-overlay"></div>
+                        <div class="scan-guide">
+                            <div class="scan-frame" style="border-color: #dc2626;"></div>
+                            <div class="scan-instruction">QR 코드를 이 영역에 맞춰주세요</div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center mt-2">
+                        <button id="startScanBtn" class="btn btn-primary">카메라 시작</button>
+                        <button id="stopScanBtn" class="btn btn-secondary hidden">카메라 정지</button>
+                    </div>
+                </div>
+
+                <div id="status" class="hidden"></div>
+                
+                <!-- 결제 진행 중 로딩 표시 -->
+                <div id="paymentProcessing" class="qr-section hidden">
+                    <h2>💳 처리 중</h2>
+                    <div class="text-center">
+                        <div class="loading"></div>
+                        <p id="paymentProgressText">처리하고 있습니다...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resultSection" class="qr-section hidden">
+                <h2>✅ 결제 결과</h2>
+                <div id="resultInfo"></div>
+                
+                <div class="text-center mt-3">
+                    <button id="newScanBtn" class="btn btn-primary">새로운 스캔</button>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3>💡 2단계 스캔 방법</h3>
+                <ol>
+                    <li><strong>1단계 - 개인키 QR 스캔:</strong> 빨간색 테두리의 개인키 QR 코드를 먼저 스캔합니다</li>
+                    <li><strong>2단계 - 결제정보 QR 스캔:</strong> 초록색 테두리의 결제정보 QR 코드를 두 번째로 스캔합니다</li>
+                    <li><strong>자동 결제:</strong> 두 QR 코드가 모두 스캔되면 자동으로 가스리스 결제가 실행됩니다</li>
+                </ol>
+                
+                <div class="status warning mt-2">
+                    <strong>🔐 보안 특징:</strong> 개인키와 결제정보가 분리되어 더욱 안전합니다.
+                </div>
+                
+                <div class="status info mt-2">
+                    <strong>📱 스캔 순서:</strong> 반드시 빨간색 개인키 QR → 초록색 결제정보 QR 순서로 스캔해주세요.
+                </div>
+            </div>
+
+            <div class="text-center mt-3">
+                <a href="/" class="btn btn-secondary">홈으로 돌아가기</a>
+                <a href="/generate" class="btn btn-primary">QR 생성하러 가기</a>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 2단계 가스리스 결제 시스템</p>
+        </footer>
+    </div>
+
+    <!-- QR 스캐너 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
+    
+    <!-- Ethers.js v6 라이브러리 -->
+    <script type="module">
+        import { ethers } from "https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.min.js";
+        window.ethers = ethers;
+    </script>
+    
+    <!-- 2단계 스캔 페이지 스크립트 -->
+    <script src="scan-payment-v2.js"></script>
+</body>
+</html>

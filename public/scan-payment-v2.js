@@ -1,37 +1,56 @@
-// QR 스캔 및 결제 처리 JavaScript
+// QR 스캔 및 2단계 결제 처리 JavaScript
 
-class PaymentScanner {
+class DualQRPaymentScanner {
     constructor() {
         this.scanner = null;
+        this.currentStep = 1; // 1: 개인키 QR, 2: 결제정보 QR
+        this.sessionId = null;
+        this.privateKeyData = null;
         this.paymentData = null;
-        this.provider = null;
-        this.wallet = null;
         this.debugLogs = [];
         this.scanAttempts = 0;
         this.isScanning = false;
         this.lastScanTime = null;
         this.pauseScanning = false;
-        this.sessionMode = false;
-        this.sessionId = null;
         this.init();
     }
 
     async init() {
         this.bindEvents();
         this.initializeEthers();
-        await this.checkURLSession();
+        this.updateStepIndicator();
     }
 
     bindEvents() {
         document.getElementById('startScanBtn').addEventListener('click', () => this.startScanner());
-        document.getElementById('stopScanBtn').addEventListener('click', async () => await this.stopScanner());
-        document.getElementById('newScanBtn').addEventListener('click', async () => await this.resetScanner());
+        document.getElementById('stopScanBtn').addEventListener('click', () => this.stopScanner());
+        document.getElementById('newScanBtn').addEventListener('click', () => this.resetScanner());
         
         // 모바일 터치 이벤트 지원
         this.bindMobileTouchEvents();
         
         // 페이지 가시성 변경 이벤트 (성능 최적화)
         document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+    }
+
+    updateStepIndicator() {
+        // 단계별 UI 업데이트
+        const stepTitle = document.getElementById('stepTitle');
+        const stepDescription = document.getElementById('stepDescription');
+        
+        if (this.currentStep === 1) {
+            stepTitle.innerHTML = '1️⃣ 개인키 QR 코드 스캔';
+            stepDescription.innerHTML = '빨간색 개인키 QR 코드를 먼저 스캔해주세요';
+            document.querySelector('.scan-frame').style.borderColor = '#dc2626'; // 빨간색
+        } else if (this.currentStep === 2) {
+            stepTitle.innerHTML = '2️⃣ 결제정보 QR 코드 스캔';
+            stepDescription.innerHTML = '초록색 결제정보 QR 코드를 스캔해주세요';
+            document.querySelector('.scan-frame').style.borderColor = '#16a34a'; // 초록색
+        } else {
+            stepTitle.innerHTML = '✅ 스캔 완료';
+            stepDescription.innerHTML = '결제 처리가 완료되었습니다';
+            document.querySelector('.scan-frame').style.borderColor = '#6b7280'; // 회색
+        }
     }
 
     initializeEthers() {
@@ -60,84 +79,11 @@ class PaymentScanner {
         this.showStatus('라이브러리 로드 완료. QR 스캔을 시작할 수 있습니다.', 'info');
     }
 
-    // URL 파라미터에서 세션 확인
-    async checkURLSession() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session');
-        
-        if (sessionId) {
-            this.addDebugLog(`🔗 URL에서 세션 ID 발견: ${sessionId}`);
-            this.showStatus('세션 정보를 확인하는 중...', 'info');
-            
-            try {
-                // 백엔드에서 세션 정보 조회
-                const response = await fetch(`/session/${sessionId}`);
-                
-                if (!response.ok) {
-                    throw new Error('세션을 찾을 수 없습니다.');
-                }
-                
-                const sessionData = await response.json();
-                this.addDebugLog(`✅ 세션 정보 조회 성공: ${JSON.stringify(sessionData)}`);
-                
-                // 세션이 유효한 경우 세션 정보 설정
-                this.sessionId = sessionId;
-                
-                // UI 업데이트 - 첫 번째 QR 정보를 표시
-                this.updateUIForSession(sessionData);
-                
-                // 세션 모드 플래그 설정 (자동 카메라 시작 제거)
-                this.sessionMode = true;
-                
-                // 사용자가 수동으로 스캔을 시작하도록 안내
-                this.showStatus('첫 번째 QR 코드 정보가 확인되었습니다. "스캔 시작" 버튼을 눌러 결제정보 QR 코드를 스캔해주세요.', 'success');
-                
-            } catch (error) {
-                this.addDebugLog(`❌ 세션 조회 실패: ${error.message}`);
-                this.showStatus('세션 정보를 찾을 수 없습니다: ' + error.message, 'error');
-            }
-        }
-    }
-
-    // 세션 정보를 위한 UI 업데이트
-    updateUIForSession(sessionData) {
-        // 스캔 안내 메시지 업데이트
-        const scanGuide = document.querySelector('.scan-instruction');
-        if (scanGuide) {
-            scanGuide.textContent = '결제정보 QR 코드를 이 영역에 맞춰주세요';
-        }
-
-        // 정보 섹션에 세션 상태 표시
-        const infoSection = document.querySelector('.info-section');
-        if (infoSection) {
-            const sessionInfo = document.createElement('div');
-            sessionInfo.className = 'status success mt-2';
-            sessionInfo.innerHTML = `
-                <strong>✅ 첫 번째 QR 스캔 완료</strong><br>
-                세션 ID: ${this.sessionId.substring(0, 20)}...<br>
-                이제 결제정보 QR 코드를 스캔해주세요.
-            `;
-            infoSection.insertBefore(sessionInfo, infoSection.firstChild);
-        }
-    }
-
     async startScanner() {
         try {
-            // 이미 스캐너가 실행 중인지 확인
-            if (this.isScanning && this.scanner) {
-                this.addDebugLog('⚠️ 스캐너가 이미 실행 중입니다. 중복 시작 방지.');
-                return;
-            }
+            this.addDebugLog(`📱 QR 스캐너 시작 중... (단계: ${this.currentStep})`);
             
-            // 기존 스캐너가 있다면 먼저 정리
-            if (this.scanner) {
-                this.addDebugLog('🔄 기존 스캐너 인스턴스 정리 중...');
-                await this.cleanupScanner();
-            }
-            
-            this.addDebugLog('📱 QR 스캐너 시작 중...');
-            
-            // 모바일 기기 감지 (전체 함수에서 사용)
+            // 모바일 기기 감지
             const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             this.addDebugLog(`📱 모바일 기기 감지: ${isMobile}`);
             
@@ -162,21 +108,20 @@ class PaymentScanner {
             
             this.addDebugLog('📹 비디오 엘리먼트 확인됨');
             
-            // 명시적 카메라 권한 요청 (모바일 브라우저용)
+            // 명시적 카메라 권한 요청
             this.addDebugLog('📸 카메라 권한 요청 중...');
             try {
-                // 모바일 최적화된 카메라 설정
                 const constraints = {
                     video: {
-                        facingMode: 'environment', // 후면 카메라 우선
+                        facingMode: 'environment',
                         width: { 
                             min: 640,
-                            ideal: isMobile ? 1280 : 1280, // QR 인식을 위해 더 높은 해상도
+                            ideal: isMobile ? 1080 : 1280,
                             max: 1920
                         },
                         height: { 
                             min: 480,
-                            ideal: isMobile ? 960 : 720, // QR 인식을 위해 더 높은 해상도
+                            ideal: isMobile ? 720 : 720,
                             max: 1080
                         },
                         frameRate: {
@@ -184,64 +129,48 @@ class PaymentScanner {
                             ideal: isMobile ? 25 : 30,
                             max: 30
                         },
-                        // QR 코드 인식 최적화 (정사각형에 가까운 비율)
-                        aspectRatio: isMobile ? { ideal: 1.0 } : { ideal: 4/3 }
+                        aspectRatio: isMobile ? { ideal: 4/3 } : { ideal: 16/9 }
                     }
                 };
                 
                 this.addDebugLog(`📹 카메라 제약 조건: ${JSON.stringify(constraints.video)}`);
                 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                // 임시 스트림 정지 (권한 확인용)
                 stream.getTracks().forEach(track => track.stop());
                 this.addDebugLog('✅ 카메라 권한 확인 성공');
-                            } catch (permError) {
-                    this.addDebugLog(`❌ 카메라 권한 거부: ${permError.message}`);
-                    throw new Error('카메라 권한이 필요합니다. 브라우저 설정에서 카메라 접근을 허용해주세요.');
-                }
+            } catch (permError) {
+                this.addDebugLog(`❌ 카메라 권한 거부: ${permError.message}`);
+                throw new Error('카메라 권한이 필요합니다. 브라우저 설정에서 카메라 접근을 허용해주세요.');
+            }
             
-                        // QR 스캐너 초기화 (모바일 최적화)
+            // QR 스캐너 초기화
             this.scanner = new QrScanner(
                 video,
-                async result => {
+                result => {
                     this.addDebugLog(`🎯 QR 코드 스캔 성공: ${result.data || result}`);
                     this.showQRDetectedFeedback();
-                    await this.handleQRResult(result.data || result);
+                    this.handleQRResult(result.data || result);
                 },
                 {
-                    // 새 API 사용으로 상세 결과 반환
                     returnDetailedScanResult: true,
                     
-                    // QR 코드 인식률 향상을 위한 추가 옵션
-                    overlay: null, // 오버레이 비활성화로 성능 향상
-                    
-                    // 모바일 환경에서 지원되는 경우 워커 사용
-                    worker: window.Worker ? true : false,
-                    
                     onDecodeError: error => {
-                        // 일시 중단 상태이면 스캔 시도 카운트 안함
-                        if (this.pauseScanning) {
-                            return;
-                        }
+                        if (this.pauseScanning) return;
                         
                         this.scanAttempts++;
                         this.lastScanTime = new Date().toLocaleTimeString();
                         
-                        // 모든 스캔 시도를 로깅 (디버깅용)
-                        if (this.scanAttempts % 5 === 0) { // 5번마다 상태 업데이트
+                        if (this.scanAttempts % 5 === 0) {
                             this.updateScanningStatus();
                         }
                         
-                        // 스캔 시도 카운터 비상적 증가 감지
                         if (this.scanAttempts % 50 === 0) {
                             this.addDebugLog(`⚠️ ${this.scanAttempts}회 시도 후도 QR 코드 비인식. 카메라 상태 확인 필요`);
                         }
                         
-                        // 에러 로깅 (일반적인 'No QR code found' 제외)
                         if (error && !error.toString().includes('No QR code found')) {
                             this.addDebugLog(`⚠️ QR 스캔 오류: ${error}`);
                             
-                            // 심각한 에러의 경우 스캔 중단 고려
                             if (error.toString().includes('NetworkError') || 
                                 error.toString().includes('NotReadableError')) {
                                 this.addDebugLog('❌ 카메라 오류 감지, 스캔 중단 고려');
@@ -250,28 +179,20 @@ class PaymentScanner {
                         }
                     },
                     
-                    // 시각적 하이라이트
                     highlightScanRegion: true,
                     highlightCodeOutline: true,
-                    
-                    // 후면 카메라 우선
                     preferredCamera: 'environment',
+                    maxScansPerSecond: isMobile ? 8 : 15,
                     
-                    // 모바일 최적화: 스캔 빈도 조정 (더 낮은 빈도로 안정성 향상)
-                    maxScansPerSecond: isMobile ? 4 : 10, // 모바일에서 더 안정적인 스캔을 위해 빈도 감소
-                    
-                    // 모바일 카메라에 최적화된 스캔 영역 설정
                     calculateScanRegion: (video) => {
                         const width = video.videoWidth;
                         const height = video.videoHeight;
                         const minDimension = Math.min(width, height);
                         
-                        // 모바일에서 더 넓은 스캔 영역 사용 (인식률 향상)
-                        const scanRatio = isMobile ? 0.95 : 0.85; // 더 넓은 스캔 영역으로 증가
+                        const scanRatio = isMobile ? 0.85 : 0.75;
                         const scanSize = Math.floor(minDimension * scanRatio);
                         
-                        // 모바일에서 성능 고려한 다운스케일링 (품질 향상)
-                        const downscaleRatio = isMobile ? 0.9 : 1.0;
+                        const downscaleRatio = isMobile ? 0.8 : 1.0;
                         const downScaledWidth = Math.floor(scanSize * downscaleRatio);
                         const downScaledHeight = Math.floor(scanSize * downscaleRatio);
                         
@@ -291,17 +212,15 @@ class PaymentScanner {
             
             this.addDebugLog('🔧 QR 스캐너 인스턴스 생성됨');
 
-            // 카메라 시작 및 상세 상태 확인
+            // 카메라 시작
             this.addDebugLog('📸 카메라 시작 중...');
             
             try {
                 await this.scanner.start();
                 
-                // 카메라 시작 후 상세 정보 로깅
                 const hasCamera = await QrScanner.hasCamera();
                 this.addDebugLog(`📷 카메라 사용 가능: ${hasCamera}`);
                 
-                // 카메라 목록 확인
                 try {
                     const cameras = await QrScanner.listCameras(true);
                     this.addDebugLog(`📷 사용 가능한 카메라: ${cameras.length}개`);
@@ -312,7 +231,6 @@ class PaymentScanner {
                     this.addDebugLog(`⚠️ 카메라 목록 확인 실패: ${e.message}`);
                 }
                 
-                // 플래시 지원 확인
                 try {
                     const hasFlash = await this.scanner.hasFlash();
                     this.addDebugLog(`🔦 플래시 지원: ${hasFlash}`);
@@ -328,34 +246,49 @@ class PaymentScanner {
             this.addDebugLog('✅ 카메라 시작 성공!');
             this.isScanning = true;
             this.scanAttempts = 0;
-            this.scanStartTime = Date.now(); // 스캔 시작 시간 기록
+            this.scanStartTime = Date.now();
             
             document.getElementById('startScanBtn').classList.add('hidden');
             document.getElementById('stopScanBtn').classList.remove('hidden');
             
-            // 스캔 상태 모니터링 시작
             this.startScanMonitoring();
             
-            this.showStatus('카메라가 시작되었습니다. QR 코드를 스캔해주세요.', 'info');
+            if (this.currentStep === 1) {
+                this.showStatus('카메라가 시작되었습니다. 개인키 QR 코드(빨간색)를 스캔해주세요.', 'info');
+            } else {
+                this.showStatus('카메라가 시작되었습니다. 결제정보 QR 코드(초록색)를 스캔해주세요.', 'info');
+            }
 
         } catch (error) {
             this.addDebugLog(`❌ 스캐너 시작 실패: ${error.message}`);
             this.addDebugLog(`❌ 에러 스택: ${error.stack}`);
             
             this.showStatus('카메라 시작 실패: ' + error.message, 'error');
-            
-            // 대안 제시
             this.showAlternativeOptions();
         }
     }
 
-    async stopScanner() {
+    stopScanner() {
         this.addDebugLog('📸 카메라 스캐너 정지 중...');
         
-        // cleanupScanner를 사용하여 완전한 정리
-        await this.cleanupScanner();
+        this.isScanning = false;
+        this.pauseScanning = false;
+        this.stopScanMonitoring();
         
-        // UI 상태 업데이트
+        if (this.scanner) {
+            try {
+                this.scanner.stop();
+                this.scanner.destroy();
+                this.addDebugLog('✅ 스캐너 인스턴스 정리 완료');
+            } catch (error) {
+                this.addDebugLog(`⚠️ 스캐너 정리 오류: ${error.message}`);
+            } finally {
+                this.scanner = null;
+            }
+        }
+        
+        this.cleanupVideoElement();
+        
         document.getElementById('startScanBtn').classList.remove('hidden');
         document.getElementById('stopScanBtn').classList.add('hidden');
         this.showStatus('카메라가 정지되었습니다.', 'info');
@@ -365,7 +298,6 @@ class PaymentScanner {
         const video = document.getElementById('scanner-video');
         if (video && video.srcObject) {
             try {
-                // 비디오 스트림 정리
                 const tracks = video.srcObject.getTracks();
                 tracks.forEach(track => {
                     track.stop();
@@ -379,47 +311,12 @@ class PaymentScanner {
         }
     }
 
-    async cleanupScanner() {
-        this.addDebugLog('🧹 스캐너 완전 정리 시작');
-        
-        // 스캔 상태 플래그 설정
-        this.isScanning = false;
-        this.pauseScanning = false;
-        
-        // 모니터링 정지
-        this.stopScanMonitoring();
-        
-        // 스캐너 인스턴스 정리
-        if (this.scanner) {
-            try {
-                this.scanner.stop();
-                this.scanner.destroy();
-                this.addDebugLog('✅ 스캐너 인스턴스 정리 완료');
-            } catch (error) {
-                this.addDebugLog(`⚠️ 스캐너 정리 오류: ${error.message}`);
-            } finally {
-                this.scanner = null;
-            }
-        }
-        
-        // 비디오 엘리먼트 정리
-        this.cleanupVideoElement();
-        
-        // 약간의 지연으로 완전한 정리 보장
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        this.addDebugLog('✅ 스캐너 완전 정리 완료');
-    }
-
-
-
-    async handleQRResult(result) {
+    handleQRResult(result) {
         try {
-            this.addDebugLog(`🎉 QR 결과 처리 시작: ${result}`);
+            this.addDebugLog(`🎉 QR 결과 처리 시작 (단계: ${this.currentStep}): ${result}`);
             
-            await this.stopScanner();
+            this.stopScanner();
             
-            // QR 결과가 문자열인지 확인
             if (typeof result !== 'string') {
                 this.addDebugLog(`📝 QR 결과를 문자열로 변환: ${result}`);
                 result = result.toString();
@@ -427,17 +324,15 @@ class PaymentScanner {
             
             this.addDebugLog('📊 QR 데이터 파싱 시도');
             
-            // QR 데이터 파싱
             const qrData = JSON.parse(result);
+            this.addDebugLog('✅ QR 데이터 파싱 성공');
             
-            // 세션 ID가 있는 경우 (URL을 통해 들어온 경우)
-            if (this.sessionId) {
-                this.addDebugLog('🔗 세션 기반 결제 처리 시작');
-                this.handleSessionBasedPayment(qrData);
-            } else {
-                // 기존 방식 (단일 QR 코드)
-                this.addDebugLog('💳 단일 QR 기반 결제 처리 시작');
-                this.handleDirectPayment(qrData);
+            if (this.currentStep === 1) {
+                // 첫 번째 QR: 개인키 세션
+                this.handlePrivateKeyQR(qrData);
+            } else if (this.currentStep === 2) {
+                // 두 번째 QR: 결제정보
+                this.handlePaymentQR(qrData);
             }
             
         } catch (error) {
@@ -447,66 +342,24 @@ class PaymentScanner {
         }
     }
 
-    // 세션 기반 결제 처리 (2단계 QR)
-    async handleSessionBasedPayment(qrData) {
-        try {
-            this.addDebugLog('✅ 결제정보 QR 데이터 파싱 성공');
-            this.addDebugLog(`- 타입: ${qrData.type}`);
-            this.addDebugLog(`- 세션 ID: ${qrData.sessionId}`);
-            this.addDebugLog(`- 금액: ${qrData.amount}`);
-            this.addDebugLog(`- 수신자: ${qrData.recipient}`);
-            
-            // 세션 ID 확인
-            if (qrData.sessionId !== this.sessionId) {
-                throw new Error('세션 ID가 일치하지 않습니다. 올바른 QR 코드를 스캔해주세요.');
-            }
-
-            if (qrData.type !== 'payment_request') {
-                throw new Error('결제정보 QR 코드가 아닙니다. 두 번째 QR 코드를 스캔해주세요.');
-            }
-
-            // 섹션 전환 - 스캔 섹션 숨기고 결제 진행 표시
-            document.getElementById('scannerSection').classList.add('hidden');
-            document.getElementById('paymentProcessing').classList.remove('hidden');
-            
-            this.showStatus('결제정보 QR 코드를 스캔했습니다. 결제를 진행합니다...', 'success');
-            
-            // 백엔드에 세션 기반 결제 요청
-            await this.executeSessionPayment(qrData);
-            
-        } catch (error) {
-            this.addDebugLog(`❌ 세션 기반 결제 처리 실패: ${error.message}`);
-            this.showStatus('결제 처리 실패: ' + error.message, 'error');
+    async handlePrivateKeyQR(qrData) {
+        this.addDebugLog('🔐 개인키 QR 처리 시작');
+        
+        if (qrData.type !== 'private_key_session') {
+            throw new Error('개인키 QR 코드가 아닙니다. 빨간색 개인키 QR 코드를 스캔해주세요.');
         }
-    }
 
-    // 기존 방식 결제 처리 (단일 QR)
-    handleDirectPayment(paymentData) {
-        this.addDebugLog('✅ QR 데이터 파싱 성공');
-        this.addDebugLog(`- 금액: ${paymentData.amount}`);
-        this.addDebugLog(`- 수신자: ${paymentData.recipient}`);
-        this.addDebugLog(`- 토큰: ${paymentData.token}`);
+        this.privateKeyData = qrData;
+        this.sessionId = qrData.sessionId;
         
-        this.paymentData = paymentData;
-        
-        // 섹션 전환 - 스캔 섹션 숨기고 결제 진행 표시
-        document.getElementById('scannerSection').classList.add('hidden');
-        document.getElementById('paymentProcessing').classList.remove('hidden');
-        
-        this.showStatus('QR 코드를 스캔했습니다. 결제를 진행합니다...', 'success');
-        
-        // 바로 결제 실행
-        this.executePayment();
-    }
+        this.addDebugLog(`- 세션 ID: ${this.sessionId}`);
+        this.addDebugLog(`- 만료 시간: ${new Date(qrData.expiresAt).toLocaleString()}`);
 
-    // 세션 기반 결제 실행
-    async executeSessionPayment(qrData) {
         try {
-            // 결제 진행 상태 업데이트
-            this.updatePaymentProgress('서버에 세션 기반 가스리스 결제 요청 중...');
+            // 서버에 개인키 세션 저장
+            this.updatePaymentProgress('개인키를 안전하게 저장 중...');
             
-            // 백엔드의 세션 기반 결제 API 호출
-            const response = await fetch('/scan/payment', {
+            const response = await fetch('/scan/private-key', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -520,30 +373,69 @@ class PaymentScanner {
             }
 
             const result = await response.json();
+            this.addDebugLog('✅ 개인키 세션 저장 성공');
+
+            // 다음 단계로 진행
+            this.currentStep = 2;
+            this.updateStepIndicator();
             
-            // 성공 처리
-            this.handlePaymentSuccess(result);
+            // 섹션 전환
+            document.getElementById('scannerSection').classList.add('hidden');
+            document.getElementById('paymentProcessing').classList.remove('hidden');
+            
+            this.updatePaymentProgress('개인키가 저장되었습니다. 이제 결제정보 QR 코드(초록색)를 스캔해주세요.');
+            
+            // 3초 후 자동으로 스캔 재시작
+            setTimeout(() => {
+                document.getElementById('paymentProcessing').classList.add('hidden');
+                document.getElementById('scannerSection').classList.remove('hidden');
+                this.startScanner();
+            }, 3000);
 
         } catch (error) {
-            console.error('세션 기반 결제 실행 실패:', error);
-            this.handlePaymentError(error);
+            this.addDebugLog(`❌ 개인키 세션 저장 실패: ${error.message}`);
+            this.showStatus('개인키 저장 실패: ' + error.message, 'error');
         }
     }
 
+    async handlePaymentQR(qrData) {
+        this.addDebugLog('💳 결제정보 QR 처리 시작');
+        
+        if (qrData.type !== 'payment_request') {
+            throw new Error('결제정보 QR 코드가 아닙니다. 초록색 결제정보 QR 코드를 스캔해주세요.');
+        }
 
+        if (qrData.sessionId !== this.sessionId) {
+            throw new Error('세션 ID가 일치하지 않습니다. 올바른 결제정보 QR 코드를 스캔해주세요.');
+        }
+
+        this.paymentData = qrData;
+        
+        this.addDebugLog(`- 금액: ${qrData.amount}`);
+        this.addDebugLog(`- 수신자: ${qrData.recipient}`);
+        this.addDebugLog(`- 토큰: ${qrData.token}`);
+        
+        // 섹션 전환
+        document.getElementById('scannerSection').classList.add('hidden');
+        document.getElementById('paymentProcessing').classList.remove('hidden');
+        
+        this.showStatus('결제정보 QR 코드를 스캔했습니다. 결제를 진행합니다...', 'success');
+        
+        // 결제 실행
+        this.executePayment();
+    }
 
     async executePayment() {
-        if (!this.paymentData) {
+        if (!this.paymentData || !this.sessionId) {
             this.showStatus('결제 데이터가 없습니다.', 'error');
             return;
         }
 
         try {
-            // 결제 진행 상태 업데이트
-            this.updatePaymentProgress('서버에 가스리스 결제 요청 중...');
+            this.updatePaymentProgress('세션 결합 및 가스리스 결제 실행 중...');
             
-            // 서버에 가스리스 결제 요청
-            const result = await this.sendGaslessPayment();
+            // 서버에 결제 세션 저장 및 결제 실행 요청
+            const result = await this.sendSessionBasedPayment();
             
             // 성공 처리
             this.handlePaymentSuccess(result);
@@ -554,27 +446,13 @@ class PaymentScanner {
         }
     }
 
-    async sendGaslessPayment() {
-        // 서버에 가스리스 결제 요청
-        const requestBody = {
-            qrData: {
-                token: this.paymentData.token,
-                to: this.paymentData.recipient, // QR 데이터의 필드명은 recipient
-                amountWei: this.paymentData.amount, // QR 데이터의 필드명은 amount
-                chainId: this.paymentData.chainId,
-                delegateAddress: this.paymentData.delegateAddress,
-                rpcUrl: this.paymentData.rpcUrl,
-                serverUrl: this.paymentData.serverUrl,
-                timestamp: this.paymentData.timestamp
-            }
-        };
-
-        const response = await fetch(`${this.paymentData.serverUrl}/gasless-payment`, {
+    async sendSessionBasedPayment() {
+        const response = await fetch('/scan/payment', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(this.paymentData)
         });
 
         if (!response.ok) {
@@ -586,6 +464,9 @@ class PaymentScanner {
     }
 
     handlePaymentSuccess(result) {
+        this.currentStep = 3;
+        this.updateStepIndicator();
+        
         // 결제 진행 섹션 숨기기
         document.getElementById('paymentProcessing').classList.add('hidden');
         
@@ -595,14 +476,15 @@ class PaymentScanner {
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
             <div class="status success">
-                <h3>✅ 결제 완료!</h3>
-                <strong>거래 해시:</strong> <a href="#" target="_blank">${this.shortenAddress(result.txHash)}</a><br>
+                <h3>✅ 2단계 결제 완료!</h3>
+                <strong>세션 ID:</strong> ${this.sessionId}<br>
+                <strong>거래 해시:</strong> <a href="#" target="_blank">${this.shortenAddress(result.paymentResult?.txHash)}</a><br>
                 <strong>상태:</strong> ${result.status}<br>
                 <strong>완료 시간:</strong> ${new Date().toLocaleString()}
             </div>
             <div class="status info mt-2">
-                가스리스 결제가 성공적으로 완료되었습니다!<br>
-                블록체인에서 거래가 확인될 때까지 잠시 기다려주세요.
+                2단계 가스리스 결제가 성공적으로 완료되었습니다!<br>
+                개인키와 결제정보가 안전하게 처리되었습니다.
             </div>
         `;
     }
@@ -624,57 +506,52 @@ class PaymentScanner {
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
             <div class="status error">
-                <h3>❌ 결제 실패</h3>
+                <h3>❌ 2단계 결제 실패</h3>
+                <strong>세션 ID:</strong> ${this.sessionId || 'N/A'}<br>
+                <strong>현재 단계:</strong> ${this.currentStep === 1 ? '개인키 QR 스캔' : '결제정보 QR 스캔'}<br>
                 <strong>오류 내용:</strong> ${error.message}<br>
                 <strong>실패 시간:</strong> ${new Date().toLocaleString()}
             </div>
             <div class="status info mt-2">
-                결제 처리 중 오류가 발생했습니다.<br>
-                다시 시도하거나 관리자에게 문의해주세요.
+                2단계 결제 처리 중 오류가 발생했습니다.<br>
+                처음부터 다시 시도하거나 관리자에게 문의해주세요.
             </div>
         `;
         
         this.showStatus('결제 실행 실패: ' + error.message, 'error');
     }
 
-
-
-    async resetScanner() {
+    resetScanner() {
         this.addDebugLog('🔄 스캐너 상태 초기화 시작');
         
-        // 스캐너 완전 정지
         if (this.isScanning) {
-            await this.stopScanner();
+            this.stopScanner();
         }
         
-        // 모든 섹션 초기화
+        // 상태 초기화
+        this.currentStep = 1;
+        this.sessionId = null;
+        this.privateKeyData = null;
+        this.paymentData = null;
+        this.scanAttempts = 0;
+        this.lastScanTime = null;
+        this.pauseScanning = false;
+        
+        // UI 초기화
         document.getElementById('scannerSection').classList.remove('hidden');
         document.getElementById('paymentProcessing').classList.add('hidden');
         document.getElementById('resultSection').classList.add('hidden');
         
-        // 데이터 초기화
-        this.paymentData = null;
-        this.wallet = null;
-        this.provider = null;
-        this.scanAttempts = 0;
-        this.lastScanTime = null;
-        this.pauseScanning = false;
-        this.sessionMode = false;
-        this.sessionId = null;
+        this.updateStepIndicator();
         
-
-        
-        // 비디오 컨테이너 스타일 초기화
         const videoContainer = document.querySelector('.video-container');
         if (videoContainer) {
             videoContainer.style.transform = 'scale(1)';
         }
         
         this.addDebugLog('✅ 상태 초기화 완료');
-        this.showStatus('새로운 QR 코드를 스캔할 준비가 되었습니다.', 'info');
+        this.showStatus('새로운 2단계 QR 코드 스캔을 시작할 준비가 되었습니다.', 'info');
     }
-
-
 
     shortenAddress(address) {
         if (!address) return '';
@@ -682,7 +559,6 @@ class PaymentScanner {
     }
 
     showAlternativeOptions() {
-        // 카메라 스캔 실패 시 대안 옵션 제시
         const statusEl = document.getElementById('status');
         statusEl.className = 'status warning';
         statusEl.innerHTML = `
@@ -699,19 +575,14 @@ class PaymentScanner {
         const timestamp = new Date().toLocaleTimeString();
         this.debugLogs.push(`[${timestamp}] ${message}`);
         
-        // 최대 50개 로그만 유지
         if (this.debugLogs.length > 50) {
             this.debugLogs.shift();
         }
         
-        // 콘솔에도 출력
         console.log(message);
     }
 
-
-
     startScanMonitoring() {
-        // 간단한 상태 업데이트만 수행
         this.scanMonitorInterval = setInterval(() => {
             if (this.isScanning) {
                 this.updateScanningStatus();
@@ -729,28 +600,27 @@ class PaymentScanner {
     updateScanningStatus() {
         if (!this.isScanning) return;
         
-        // 간단한 상태 표시 업데이트
         const statusEl = document.getElementById('status');
         if (statusEl && !statusEl.classList.contains('error')) {
+            const stepText = this.currentStep === 1 ? '개인키 QR 코드(빨간색)' : '결제정보 QR 코드(초록색)';
             statusEl.className = 'status info';
-            statusEl.innerHTML = '🔍 QR 코드를 스캔하는 중입니다...';
+            statusEl.innerHTML = `🔍 ${stepText}를 스캔하는 중입니다...`;
             statusEl.classList.remove('hidden');
         }
     }
     
     showQRDetectedFeedback() {
-        // QR 코드 감지 시 즉시 피드백
         const statusEl = document.getElementById('status');
+        const stepText = this.currentStep === 1 ? '개인키 QR' : '결제정보 QR';
         statusEl.className = 'status success';
-        statusEl.innerHTML = '🎉 QR 코드 감지! 데이터 처리 중...';
+        statusEl.innerHTML = `🎉 ${stepText} 코드 감지! 데이터 처리 중...`;
         statusEl.classList.remove('hidden');
         
-        // 비프음 사운드 또는 진동 (지원되는 경우)
         if ('vibrate' in navigator) {
             navigator.vibrate(200);
         }
         
-        this.addDebugLog('🎉 QR 코드 감지됨! 처리 시작');
+        this.addDebugLog(`🎉 ${stepText} 코드 감지됨! 처리 시작`);
     }
 
     showStatus(message, type) {
@@ -759,23 +629,20 @@ class PaymentScanner {
         statusEl.textContent = message;
         statusEl.classList.remove('hidden');
 
-        // 디버깅 로그에도 추가
         this.addDebugLog(`💬 상태 메시지 (${type}): ${message}`);
 
-        // 성공/정보 메시지는 5초 후 자동 숨김
         if (type === 'success' || type === 'info') {
             setTimeout(() => {
-                if (statusEl.textContent === message) { // 다른 메시지로 바뀌지 않았을 때만
+                if (statusEl.textContent === message) {
                     statusEl.classList.add('hidden');
                 }
             }, 5000);
         }
         
-        // 모바일 진동 피드백
         if (type === 'success' && 'vibrate' in navigator) {
-            navigator.vibrate([100, 50, 100]); // 성공 패턴
+            navigator.vibrate([100, 50, 100]);
         } else if (type === 'error' && 'vibrate' in navigator) {
-            navigator.vibrate([200, 100, 200, 100, 200]); // 에러 패턴
+            navigator.vibrate([200, 100, 200, 100, 200]);
         }
     }
     
@@ -783,33 +650,26 @@ class PaymentScanner {
         const videoContainer = document.querySelector('.video-container');
         if (!videoContainer) return;
         
-        // 비디오 컨테이너 터치 이벤트
         videoContainer.addEventListener('touchstart', (e) => {
             e.preventDefault();
             this.addDebugLog('👆 카메라 영역 터치 감지');
             
-            // 터치 시 시각적 피드백
             videoContainer.style.transform = 'scale(0.98)';
             setTimeout(() => {
                 videoContainer.style.transform = 'scale(1)';
             }, 150);
             
-            // 진동 피드백
             if ('vibrate' in navigator) {
                 navigator.vibrate(50);
             }
         });
         
-        // 스크린 회전 감지
         if (screen.orientation) {
             screen.orientation.addEventListener('change', () => {
                 this.addDebugLog(`🔄 화면 회전: ${screen.orientation.angle}°`);
-                // 회전 후 약간의 지연 후 스캔 영역 재계산
                 setTimeout(() => {
                     if (this.scanner && this.isScanning) {
                         this.addDebugLog('🔄 회전 후 스캔 설정 업데이트');
-                        // 스캔 영역 재계산을 위해 잠시 중단 후 재시작
-                        // 너무 급진적이지 않게 처리
                     }
                 }, 500);
             });
@@ -818,13 +678,11 @@ class PaymentScanner {
     
     handleVisibilityChange() {
         if (document.hidden) {
-            // 페이지가 숨겨지면 스캔 일시 중단
             if (this.isScanning) {
                 this.addDebugLog('🙈 페이지 비활성화, 스캔 일시 중단');
                 this.pauseScanning = true;
             }
         } else {
-            // 페이지가 다시 활성화되면 스캔 재개
             if (this.isScanning && this.pauseScanning) {
                 this.addDebugLog('👁️ 페이지 재활성화, 스캔 재개');
                 this.pauseScanning = false;
@@ -834,15 +692,15 @@ class PaymentScanner {
 }
 
 // 페이지 로드 시 초기화
-let paymentScannerInstance = null;
+let dualQRPaymentScannerInstance = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    paymentScannerInstance = new PaymentScanner();
+    dualQRPaymentScannerInstance = new DualQRPaymentScanner();
 });
 
 // 페이지 떠나기 전 정리
-window.addEventListener('beforeunload', async () => {
-    if (paymentScannerInstance && paymentScannerInstance.isScanning) {
-        await paymentScannerInstance.stopScanner();
+window.addEventListener('beforeunload', () => {
+    if (dualQRPaymentScannerInstance && dualQRPaymentScannerInstance.isScanning) {
+        dualQRPaymentScannerInstance.stopScanner();
     }
 });
