@@ -33,38 +33,17 @@
                     </div>
                 </div>
 
-                <div id="fileUploadSection" class="mt-3">
-                    <div class="form-group">
-                        <label for="qrFileInput">또는 QR 이미지 파일 업로드:</label>
-                        <input type="file" id="qrFileInput" class="form-control" accept="image/*">
-                    </div>
-                </div>
+
 
                 <div id="status" class="hidden"></div>
                 
-                <!-- 디버깅 정보 섹션 -->
-                <div id="debugSection" class="qr-section">
-                    <h3>🔧 시스템 상태</h3>
-                    <div id="debugInfo" class="status info">
-                        <div>상태 확인 중...</div>
+                <!-- 결제 진행 중 로딩 표시 -->
+                <div id="paymentProcessing" class="qr-section hidden">
+                    <h2>💳 결제 진행 중</h2>
+                    <div class="text-center">
+                        <div class="loading"></div>
+                        <p id="paymentProgressText">결제를 처리하고 있습니다...</p>
                     </div>
-                    <button id="toggleDebugBtn" class="btn btn-secondary btn-sm">
-                        디버깅 정보 숨기기
-                    </button>
-                </div>
-            </div>
-
-            <div id="paymentSection" class="qr-section hidden">
-                <h2>💳 결제 정보 확인</h2>
-                
-                <div id="paymentInfo"></div>
-                
-                <div class="text-center mt-3">
-                    <button id="executePaymentBtn" class="btn btn-success">
-                        <span id="paymentText">가스리스 결제 실행</span>
-                        <span id="paymentLoading" class="loading hidden"></span>
-                    </button>
-                    <button id="cancelPaymentBtn" class="btn btn-secondary ml-2">취소</button>
                 </div>
             </div>
 
@@ -80,24 +59,12 @@
             <div class="info-section">
                 <h3>💡 사용 방법</h3>
                 <ol>
-                    <li><strong>카메라 시작:</strong> "카메라 시작" 버튼을 클릭하여 QR 스캐너를 활성화합니다</li>
-                    <li><strong>QR 스캔:</strong> 결제 정보가 포함된 QR 코드를 카메라에 비춥니다</li>
-                    <li><strong>정보 확인:</strong> 스캔된 결제 정보를 확인합니다</li>
-                    <li><strong>결제 실행:</strong> "가스리스 결제 실행" 버튼을 클릭하여 결제를 완료합니다</li>
+                    <li><strong>카메라 시작:</strong> "카메라 시작" 버튼을 클릭합니다</li>
+                    <li><strong>QR 스캔:</strong> QR 코드를 카메라에 비추면 자동으로 결제가 진행됩니다</li>
                 </ol>
                 
-                <div class="status info mt-3">
-                    <strong>📱 모바일 최적화:</strong><br>
-                    이 페이지는 모바일 기기에서 최적화되어 동작합니다. 카메라 권한을 허용해주세요.<br>
-                    <strong>⚠️ 중요:</strong> HTTPS 연결이 필요하며, 최신 브라우저(Chrome, Safari)에서 최적으로 동작합니다.
-                </div>
-                
                 <div class="status warning mt-2">
-                    <strong>🔧 문제 해결:</strong><br>
-                    카메라가 작동하지 않는 경우:<br>
-                    1. 브라우저 설정에서 카메라 권한 확인<br>
-                    2. 다른 브라우저로 시도<br>
-                    3. 위의 파일 업로드 기능 사용
+                    <strong>⚠️ 주의:</strong> QR 스캔 즉시 결제가 실행되므로 신중하게 스캔해주세요.
                 </div>
             </div>
 
