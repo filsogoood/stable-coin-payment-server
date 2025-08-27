@@ -417,8 +417,6 @@ class PaymentScanner {
         try {
             this.addDebugLog(`🎉 QR 결과 처리 시작: ${result}`);
             
-            await this.stopScanner();
-            
             // QR 결과가 문자열인지 확인
             if (typeof result !== 'string') {
                 this.addDebugLog(`📝 QR 결과를 문자열로 변환: ${result}`);
@@ -430,20 +428,174 @@ class PaymentScanner {
             // QR 데이터 파싱
             const qrData = JSON.parse(result);
             
-            // 세션 ID가 있는 경우 (URL을 통해 들어온 경우)
-            if (this.sessionId) {
-                this.addDebugLog('🔗 세션 기반 결제 처리 시작');
-                this.handleSessionBasedPayment(qrData);
+            // QR 코드 타입 확인
+            if (qrData.type === 'encrypted_private_key') {
+                // 첫 번째 QR: 개인키 (스캐너 유지)
+                this.addDebugLog('🔑 개인키 QR 코드 처리 시작 - 스캐너 유지');
+                await this.handlePrivateKeyQR(qrData);
+            } else if (qrData.type === 'encrypted_payment_only') {
+                // 두 번째 QR: 결제정보 (스캐너 중지)
+                this.addDebugLog('💳 결제정보 QR 코드 처리 시작 - 스캐너 중지');
+                await this.stopScanner();
+                await this.handlePaymentDataQR(qrData);
+            } else if (qrData.type === 'encrypted_payment') {
+                // 기존 단일 암호화된 QR 코드 처리 (스캐너 중지)
+                this.addDebugLog('🔐 단일 암호화된 QR 코드 처리 시작 - 스캐너 중지');
+                await this.stopScanner();
+                await this.handleEncryptedPayment(qrData);
+            } else if (this.sessionId) {
+                // 세션 ID가 있는 경우 (URL을 통해 들어온 경우) (스캐너 중지)
+                this.addDebugLog('🔗 세션 기반 결제 처리 시작 - 스캐너 중지');
+                await this.stopScanner();
+                await this.handleSessionBasedPayment(qrData);
             } else {
-                // 기존 방식 (단일 QR 코드)
-                this.addDebugLog('💳 단일 QR 기반 결제 처리 시작');
-                this.handleDirectPayment(qrData);
+                // 기존 방식 (단일 QR 코드) (스캐너 중지)
+                this.addDebugLog('💳 단일 QR 기반 결제 처리 시작 - 스캐너 중지');
+                await this.stopScanner();
+                await this.handleDirectPayment(qrData);
             }
             
         } catch (error) {
             this.addDebugLog(`❌ QR 데이터 파싱 실패: ${error.message}`);
             this.addDebugLog(`📝 원본 QR 데이터: ${result}`);
             this.showStatus('유효하지 않은 QR 코드입니다: ' + error.message, 'error');
+            
+            // 에러 발생 시 스캔 재개 (첫 번째 QR이었을 경우를 대비)
+            this.pauseScanning = false;
+        }
+    }
+
+    // 첫 번째 QR: 개인키 처리
+    async handlePrivateKeyQR(privateKeyData) {
+        try {
+            this.addDebugLog('🔑 개인키 QR 데이터 처리 시작');
+            this.addDebugLog(`- 세션 ID: ${privateKeyData.sessionId}`);
+            this.addDebugLog(`- 생성 시간: ${new Date(privateKeyData.timestamp).toLocaleString()}`);
+            
+            // 잠시 스캔 일시정지 (중복 스캔 방지)
+            this.pauseScanning = true;
+            
+            this.showStatus('개인키 QR 코드를 스캔했습니다. 서버에서 안전하게 저장 중...', 'success');
+            
+            // 백엔드에 개인키 데이터 전송
+            const response = await fetch('/crypto/scan-private-key', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(privateKeyData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                throw new Error(errorData.message || `HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            this.addDebugLog('✅ 개인키 저장 성공');
+            
+            // 성공 메시지와 함께 스캔 재개 안내
+            this.showStatus(`✅ 개인키가 안전하게 저장되었습니다! (세션: ${result.sessionId.substring(0, 8)}...)
+            
+🔴 이제 두 번째 QR 코드(결제정보)를 스캔해주세요.
+📱 카메라가 자동으로 다시 시작됩니다.`, 'success');
+            
+            // 1초 후 스캔 재개 (사용자가 메시지를 읽을 시간 제공)
+            setTimeout(() => {
+                this.addDebugLog('🔄 첫 번째 QR 완료, 두 번째 QR 스캔 대기 중...');
+                this.pauseScanning = false;
+                
+                // 스캔 가이드 텍스트 업데이트
+                const scanGuide = document.querySelector('.scan-instruction');
+                if (scanGuide) {
+                    scanGuide.textContent = '🔴 두 번째 QR(결제정보)를 이 영역에 맞춰주세요';
+                    scanGuide.style.color = '#e74c3c'; // 빨간색으로 강조
+                }
+                
+                this.showStatus('🔴 두 번째 QR 코드(결제정보)를 스캔해주세요!', 'info');
+            }, 1500);
+            
+        } catch (error) {
+            this.addDebugLog(`❌ 개인키 처리 실패: ${error.message}`);
+            this.showStatus('개인키 처리 실패: ' + error.message, 'error');
+            // 에러 발생 시 스캔 재개
+            this.pauseScanning = false;
+        }
+    }
+
+    // 두 번째 QR: 결제정보 처리
+    async handlePaymentDataQR(paymentData) {
+        try {
+            this.addDebugLog('💳 결제정보 QR 데이터 처리 시작');
+            this.addDebugLog(`- 세션 ID: ${paymentData.sessionId}`);
+            this.addDebugLog(`- 생성 시간: ${new Date(paymentData.timestamp).toLocaleString()}`);
+            
+            // 섹션 전환 - 스캔 섹션 숨기고 결제 진행 표시
+            document.getElementById('scannerSection').classList.add('hidden');
+            document.getElementById('paymentProcessing').classList.remove('hidden');
+            
+            this.showStatus('결제정보 QR 코드를 스캔했습니다. 개인키와 결합하여 결제를 진행합니다...', 'success');
+            
+            // 백엔드에 결제정보 데이터 전송
+            await this.executePaymentDataProcessing(paymentData);
+            
+        } catch (error) {
+            this.addDebugLog(`❌ 결제정보 처리 실패: ${error.message}`);
+            this.showStatus('결제정보 처리 실패: ' + error.message, 'error');
+        }
+    }
+
+    // 결제정보 처리 실행
+    async executePaymentDataProcessing(paymentData) {
+        try {
+            // 결제 진행 상태 업데이트
+            this.updatePaymentProgress('서버에서 개인키와 결제정보 결합 중...');
+            
+            // 백엔드의 결제정보 처리 API 호출
+            const response = await fetch('/crypto/scan-payment-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(paymentData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                throw new Error(errorData.message || `HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            // 성공 처리
+            this.handlePaymentSuccess(result);
+
+        } catch (error) {
+            console.error('결제정보 처리 실행 실패:', error);
+            this.handlePaymentError(error);
+        }
+    }
+
+    // 암호화된 QR 코드 결제 처리 (기존 단일 QR)
+    async handleEncryptedPayment(encryptedData) {
+        try {
+            this.addDebugLog('🔐 암호화된 결제 데이터 처리 시작');
+            this.addDebugLog(`- 암호화 데이터 크기: ${encryptedData.encryptedData.length}바이트`);
+            this.addDebugLog(`- 생성 시간: ${new Date(encryptedData.timestamp).toLocaleString()}`);
+            
+            // 섹션 전환 - 스캔 섹션 숨기고 결제 진행 표시
+            document.getElementById('scannerSection').classList.add('hidden');
+            document.getElementById('paymentProcessing').classList.remove('hidden');
+            
+            this.showStatus('암호화된 QR 코드를 스캔했습니다. 서버에서 복호화하여 결제를 진행합니다...', 'success');
+            
+            // 백엔드에 암호화된 결제 데이터 전송
+            await this.executeEncryptedPayment(encryptedData);
+            
+        } catch (error) {
+            this.addDebugLog(`❌ 암호화된 결제 처리 실패: ${error.message}`);
+            this.showStatus('암호화된 결제 처리 실패: ' + error.message, 'error');
         }
     }
 
@@ -497,6 +649,37 @@ class PaymentScanner {
         
         // 바로 결제 실행
         this.executePayment();
+    }
+
+    // 암호화된 결제 실행
+    async executeEncryptedPayment(encryptedData) {
+        try {
+            // 결제 진행 상태 업데이트
+            this.updatePaymentProgress('서버에서 암호화 데이터 복호화 중...');
+            
+            // 백엔드의 암호화 결제 API 호출
+            const response = await fetch('/crypto/scan-payment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(encryptedData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                throw new Error(errorData.message || `HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            // 성공 처리
+            this.handlePaymentSuccess(result);
+
+        } catch (error) {
+            console.error('암호화된 결제 실행 실패:', error);
+            this.handlePaymentError(error);
+        }
     }
 
     // 세션 기반 결제 실행
