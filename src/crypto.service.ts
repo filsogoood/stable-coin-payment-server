@@ -10,7 +10,6 @@ export interface EncryptedPaymentData {
 
 export interface EncryptedPrivateKeyData {
   type: 'encrypted_private_key';
-  sessionId: string;
   encryptedData: string;
   iv: string;
   timestamp: number;
@@ -18,7 +17,6 @@ export interface EncryptedPrivateKeyData {
 
 export interface EncryptedPaymentOnlyData {
   type: 'encrypted_payment_only';
-  sessionId: string;
   encryptedData: string;
   iv: string;
   timestamp: number;
@@ -38,7 +36,6 @@ export interface PaymentData {
 
 export interface PrivateKeyData {
   privateKey: string;
-  sessionId: string;
   timestamp: number;
 }
 
@@ -50,7 +47,6 @@ export interface PaymentOnlyData {
   serverUrl: string;
   rpcUrl: string;
   delegateAddress: string;
-  sessionId: string;
   timestamp: number;
 }
 
@@ -62,8 +58,8 @@ export class CryptoService {
   private readonly ENCRYPTION_KEY: string;
   private readonly ALGORITHM = 'aes-256-cbc';
 
-  // 2단계 QR을 위한 임시 저장소 (개인키 정보)
-  private privateKeyStorage = new Map<string, PrivateKeyData>();
+  // 가장 최근에 스캔된 개인키 (단순 LIFO 방식)
+  private latestPrivateKey: PrivateKeyData | null = null;
 
   constructor() {
     // 환경변수 존재 여부 확인
@@ -186,11 +182,10 @@ export class CryptoService {
   /**
    * 2단계 QR: 개인키만 암호화
    */
-  encryptPrivateKey(privateKey: string, sessionId: string): EncryptedPrivateKeyData {
+  encryptPrivateKey(privateKey: string): EncryptedPrivateKeyData {
     try {
       const privateKeyData: PrivateKeyData = {
         privateKey,
-        sessionId,
         timestamp: Date.now()
       };
 
@@ -203,13 +198,12 @@ export class CryptoService {
 
       const result: EncryptedPrivateKeyData = {
         type: 'encrypted_private_key',
-        sessionId,
         encryptedData: encrypted,
         iv: iv.toString('hex'),
         timestamp: Date.now()
       };
 
-      this.logger.log(`[ENCRYPT_PRIVATE_KEY] 개인키 암호화 완료: ${sessionId}`);
+      this.logger.log(`[ENCRYPT_PRIVATE_KEY] 개인키 암호화 완료`);
       return result;
     } catch (error) {
       this.logger.error(`[ENCRYPT_PRIVATE_KEY] 암호화 실패: ${error.message}`);
@@ -231,13 +225,12 @@ export class CryptoService {
 
       const result: EncryptedPaymentOnlyData = {
         type: 'encrypted_payment_only',
-        sessionId: paymentOnlyData.sessionId,
         encryptedData: encrypted,
         iv: iv.toString('hex'),
         timestamp: Date.now()
       };
 
-      this.logger.log(`[ENCRYPT_PAYMENT_ONLY] 결제정보 암호화 완료: ${paymentOnlyData.sessionId}`);
+      this.logger.log(`[ENCRYPT_PAYMENT_ONLY] 결제정보 암호화 완료`);
       return result;
     } catch (error) {
       this.logger.error(`[ENCRYPT_PAYMENT_ONLY] 암호화 실패: ${error.message}`);
@@ -248,7 +241,7 @@ export class CryptoService {
   /**
    * 개인키 복호화 및 저장
    */
-  decryptAndStorePrivateKey(encryptedPrivateKey: EncryptedPrivateKeyData): { sessionId: string; success: boolean } {
+  decryptAndStorePrivateKey(encryptedPrivateKey: EncryptedPrivateKeyData): { success: boolean } {
     try {
       if (encryptedPrivateKey.type !== 'encrypted_private_key') {
         throw new Error('잘못된 개인키 데이터 타입입니다.');
@@ -263,12 +256,12 @@ export class CryptoService {
       
       const privateKeyData: PrivateKeyData = JSON.parse(decrypted);
 
-      // 임시 저장소에 저장
-      this.privateKeyStorage.set(privateKeyData.sessionId, privateKeyData);
+      // 가장 최근 개인키로 교체 (단순 LIFO)
+      this.latestPrivateKey = privateKeyData;
 
-      this.logger.log(`[DECRYPT_PRIVATE_KEY] 개인키 복호화 및 저장 완료: ${privateKeyData.sessionId}`);
+      this.logger.log(`[DECRYPT_PRIVATE_KEY] 개인키 복호화 및 저장 완료 (최신 개인키 교체)`);
       
-      return { sessionId: privateKeyData.sessionId, success: true };
+      return { success: true };
     } catch (error) {
       this.logger.error(`[DECRYPT_PRIVATE_KEY] 복호화 실패: ${error.message}`);
       throw new Error('개인키 복호화에 실패했습니다: ' + error.message);
@@ -284,9 +277,8 @@ export class CryptoService {
         throw new Error('잘못된 결제정보 데이터 타입입니다.');
       }
 
-      // 저장된 개인키 조회
-      const privateKeyData = this.privateKeyStorage.get(encryptedPaymentOnly.sessionId);
-      if (!privateKeyData) {
+      // 최근 스캔된 개인키 조회
+      if (!this.latestPrivateKey) {
         throw new Error('개인키 정보를 찾을 수 없습니다. 첫 번째 QR 코드를 먼저 스캔해주세요.');
       }
 
@@ -300,14 +292,9 @@ export class CryptoService {
       
       const paymentOnlyData: PaymentOnlyData = JSON.parse(decrypted);
 
-      // 세션 ID 일치 확인
-      if (paymentOnlyData.sessionId !== privateKeyData.sessionId) {
-        throw new Error('세션 ID가 일치하지 않습니다.');
-      }
-
       // 완전한 결제 데이터 생성
       const completePaymentData: PaymentData = {
-        privateKey: privateKeyData.privateKey,
+        privateKey: this.latestPrivateKey.privateKey,
         amount: paymentOnlyData.amount,
         recipient: paymentOnlyData.recipient,
         token: paymentOnlyData.token,
@@ -318,10 +305,10 @@ export class CryptoService {
         timestamp: paymentOnlyData.timestamp
       };
 
-      // 사용된 개인키 정보 삭제
-      this.privateKeyStorage.delete(encryptedPaymentOnly.sessionId);
+      // 사용된 개인키 정보 삭제 (보안)
+      this.latestPrivateKey = null;
 
-      this.logger.log(`[DECRYPT_PAYMENT_COMBINE] 결제정보 복호화 및 결합 완료: ${encryptedPaymentOnly.sessionId}`);
+      this.logger.log(`[DECRYPT_PAYMENT_COMBINE] 결제정보 복호화 및 결합 완료 (최신 개인키 사용 후 삭제)`);
       
       return completePaymentData;
     } catch (error) {
@@ -331,14 +318,12 @@ export class CryptoService {
   }
 
   /**
-   * 개인키 데이터 수동 정리 (시간 제한 없음, 수동 호출용)
+   * 개인키 데이터 수동 정리
    */
   private cleanupAllPrivateKeys(): void {
-    const cleanedCount = this.privateKeyStorage.size;
-    this.privateKeyStorage.clear();
-
-    if (cleanedCount > 0) {
-      this.logger.log(`[MANUAL_CLEANUP] 개인키 데이터 ${cleanedCount}개 수동 정리됨`);
+    if (this.latestPrivateKey) {
+      this.latestPrivateKey = null;
+      this.logger.log(`[MANUAL_CLEANUP] 최신 개인키 데이터 수동 정리됨`);
     }
   }
 
@@ -347,8 +332,8 @@ export class CryptoService {
    */
   getStoredPrivateKeyStats(): any {
     return {
-      storedCount: this.privateKeyStorage.size,
-      sessionIds: Array.from(this.privateKeyStorage.keys()),
+      hasPrivateKey: !!this.latestPrivateKey,
+      privateKeyTimestamp: this.latestPrivateKey?.timestamp || null,
       timestamp: new Date().toISOString()
     };
   }

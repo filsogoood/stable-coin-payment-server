@@ -48,7 +48,6 @@ export class AppController {
     message: string;
     privateKeyQR: EncryptedPrivateKeyData;
     paymentQR: EncryptedPaymentOnlyData;
-    sessionId: string;
     timestamp: string;
   }> {
     console.log('[2개 암호화 QR 생성] 요청 데이터:', JSON.stringify(body, null, 2));
@@ -60,11 +59,8 @@ export class AppController {
       throw new Error('필수 데이터가 누락되었습니다.');
     }
 
-    // 세션 ID 생성
-    const sessionId = `crypto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
     // 1. 개인키 암호화
-    const encryptedPrivateKey = this.cryptoService.encryptPrivateKey(privateKey, sessionId);
+    const encryptedPrivateKey = this.cryptoService.encryptPrivateKey(privateKey);
 
     // 2. 결제정보 암호화 (개인키 제외)
     const paymentOnlyData = {
@@ -75,7 +71,6 @@ export class AppController {
       serverUrl: paymentData.serverUrl,
       rpcUrl: paymentData.rpcUrl,
       delegateAddress: paymentData.delegateAddress,
-      sessionId,
       timestamp: Date.now()
     };
 
@@ -88,7 +83,6 @@ export class AppController {
       message: '2개의 암호화된 QR 코드가 생성되었습니다.',
       privateKeyQR: encryptedPrivateKey,
       paymentQR: encryptedPaymentOnly,
-      sessionId,
       timestamp: new Date().toISOString()
     };
   }
@@ -102,12 +96,11 @@ export class AppController {
       // 개인키 복호화 및 저장
       const result = this.cryptoService.decryptAndStorePrivateKey(body);
       
-      console.log('[개인키 QR 스캔] 성공:', result.sessionId);
+      console.log('[개인키 QR 스캔] 성공: 최신 개인키 저장됨');
 
       return {
         status: 'success',
         message: '개인키가 안전하게 저장되었습니다. 이제 결제정보 QR 코드를 스캔해주세요.',
-        sessionId: result.sessionId,
         nextStep: 'scan_payment_qr',
         timestamp: new Date().toISOString()
       };
