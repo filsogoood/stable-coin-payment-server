@@ -249,13 +249,7 @@ export class AppService {
       }
     }
 
-    // 타임스탬프 검증 (10분 이내)
-    const now = Date.now();
-    const maxAge = 10 * 60 * 1000; // 10분
-    
-    if (now - qrData.timestamp > maxAge) {
-      throw new BadRequestException('만료된 QR 코드입니다. 새로운 QR을 생성해주세요.');
-    }
+    // 타임스탬프 검증 제거 - QR 코드는 상시 사용 가능해야 함
 
     this.logger.log(`[GASLESS_PAYMENT] QR 스캔 결제 요청 시작`);
     
