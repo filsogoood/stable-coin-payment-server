@@ -39,15 +39,15 @@ class DualQRPaymentScanner {
         const stepDescription = document.getElementById('stepDescription');
         
         if (this.currentStep === 1) {
-            stepTitle.innerHTML = '1️⃣ 개인키 QR 코드 스캔';
+            stepTitle.innerHTML = '1. 개인키 QR 코드 스캔';
             stepDescription.innerHTML = '빨간색 개인키 QR 코드를 먼저 스캔해주세요';
             document.querySelector('.scan-frame').style.borderColor = '#dc2626'; // 빨간색
         } else if (this.currentStep === 2) {
-            stepTitle.innerHTML = '2️⃣ 결제정보 QR 코드 스캔';
+            stepTitle.innerHTML = '2. 결제정보 QR 코드 스캔';
             stepDescription.innerHTML = '초록색 결제정보 QR 코드를 스캔해주세요';
             document.querySelector('.scan-frame').style.borderColor = '#16a34a'; // 초록색
         } else {
-            stepTitle.innerHTML = '✅ 스캔 완료';
+            stepTitle.innerHTML = '스캔 완료';
             stepDescription.innerHTML = '결제 처리가 완료되었습니다';
             document.querySelector('.scan-frame').style.borderColor = '#6b7280'; // 회색
         }
@@ -55,37 +55,37 @@ class DualQRPaymentScanner {
 
     initializeEthers() {
         // 라이브러리 로드 상태 확인
-        this.addDebugLog('🔍 라이브러리 로드 상태 확인 시작');
+        this.addDebugLog('라이브러리 로드 상태 확인 시작');
         
         const qrScannerStatus = typeof QrScanner !== 'undefined';
         const ethersStatus = typeof ethers !== 'undefined';
         
-        this.addDebugLog(`- QrScanner: ${qrScannerStatus ? '✅ 로드됨' : '❌ 로드 실패'}`);
-        this.addDebugLog(`- ethers: ${ethersStatus ? '✅ 로드됨' : '❌ 로드 실패'}`);
+        this.addDebugLog(`- QrScanner: ${qrScannerStatus ? '로드됨' : '로드 실패'}`);
+        this.addDebugLog(`- ethers: ${ethersStatus ? '로드됨' : '로드 실패'}`);
         
         if (!qrScannerStatus) {
-            this.addDebugLog('❌ QR 스캐너 라이브러리 로드 실패');
+            this.addDebugLog('QR 스캐너 라이브러리 로드 실패');
             this.showStatus('QR 스캐너 라이브러리 로드 실패', 'error');
             return;
         }
         
         if (!ethersStatus) {
-            this.addDebugLog('❌ Ethers.js 라이브러리 로드 실패');
+            this.addDebugLog('Ethers.js 라이브러리 로드 실패');
             this.showStatus('Ethers.js 라이브러리 로드 실패', 'error');
             return;
         }
         
-        this.addDebugLog('✅ 모든 라이브러리 로드 완료');
+        this.addDebugLog('모든 라이브러리 로드 완료');
         this.showStatus('라이브러리 로드 완료. QR 스캔을 시작할 수 있습니다.', 'info');
     }
 
     async startScanner() {
         try {
-            this.addDebugLog(`📱 QR 스캐너 시작 중... (단계: ${this.currentStep})`);
+            this.addDebugLog(`QR 스캐너 시작 중... (단계: ${this.currentStep})`);
             
             // 모바일 기기 감지
             const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            this.addDebugLog(`📱 모바일 기기 감지: ${isMobile}`);
+            this.addDebugLog(`모바일 기기 감지: ${isMobile}`);
             
             // 기본 지원 확인
             if (!navigator.mediaDevices?.getUserMedia) {
@@ -97,7 +97,7 @@ class DualQRPaymentScanner {
                 throw new Error('QR 스캐너 라이브러리가 로드되지 않았습니다.');
             }
             
-            this.addDebugLog('✅ 카메라 및 라이브러리 지원 확인됨');
+            this.addDebugLog('카메라 및 라이브러리 지원 확인됨');
 
             const video = document.getElementById('scanner-video');
             
@@ -106,10 +106,10 @@ class DualQRPaymentScanner {
                 throw new Error('비디오 엘리먼트를 찾을 수 없습니다.');
             }
             
-            this.addDebugLog('📹 비디오 엘리먼트 확인됨');
+            this.addDebugLog('비디오 엘리먼트 확인됨');
             
             // 명시적 카메라 권한 요청
-            this.addDebugLog('📸 카메라 권한 요청 중...');
+            this.addDebugLog('카메라 권한 요청 중...');
             try {
                 const constraints = {
                     video: {
@@ -133,13 +133,13 @@ class DualQRPaymentScanner {
                     }
                 };
                 
-                this.addDebugLog(`📹 카메라 제약 조건: ${JSON.stringify(constraints.video)}`);
+                this.addDebugLog(`카메라 제약 조건: ${JSON.stringify(constraints.video)}`);
                 
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 stream.getTracks().forEach(track => track.stop());
-                this.addDebugLog('✅ 카메라 권한 확인 성공');
+                this.addDebugLog('카메라 권한 확인 성공');
             } catch (permError) {
-                this.addDebugLog(`❌ 카메라 권한 거부: ${permError.message}`);
+                this.addDebugLog(`카메라 권한 거부: ${permError.message}`);
                 throw new Error('카메라 권한이 필요합니다. 브라우저 설정에서 카메라 접근을 허용해주세요.');
             }
             
@@ -147,7 +147,7 @@ class DualQRPaymentScanner {
             this.scanner = new QrScanner(
                 video,
                 result => {
-                    this.addDebugLog(`🎯 QR 코드 스캔 성공: ${result.data || result}`);
+                    this.addDebugLog(`QR 코드 스캔 성공: ${result.data || result}`);
                     this.showQRDetectedFeedback();
                     this.handleQRResult(result.data || result);
                 },
@@ -165,15 +165,15 @@ class DualQRPaymentScanner {
                         }
                         
                         if (this.scanAttempts % 50 === 0) {
-                            this.addDebugLog(`⚠️ ${this.scanAttempts}회 시도 후도 QR 코드 비인식. 카메라 상태 확인 필요`);
+                            this.addDebugLog(`${this.scanAttempts}회 시도 후도 QR 코드 비인식. 카메라 상태 확인 필요`);
                         }
                         
                         if (error && !error.toString().includes('No QR code found')) {
-                            this.addDebugLog(`⚠️ QR 스캔 오류: ${error}`);
+                            this.addDebugLog(`QR 스캔 오류: ${error}`);
                             
                             if (error.toString().includes('NetworkError') || 
                                 error.toString().includes('NotReadableError')) {
-                                this.addDebugLog('❌ 카메라 오류 감지, 스캔 중단 고려');
+                                this.addDebugLog('카메라 오류 감지, 스캔 중단 고려');
                                 this.showStatus('카메라 오류가 발생했습니다. 다시 시도해주세요.', 'error');
                             }
                         }
@@ -210,40 +210,40 @@ class DualQRPaymentScanner {
                 }
             );
             
-            this.addDebugLog('🔧 QR 스캐너 인스턴스 생성됨');
+            this.addDebugLog('QR 스캐너 인스턴스 생성됨');
 
             // 카메라 시작
-            this.addDebugLog('📸 카메라 시작 중...');
+            this.addDebugLog('카메라 시작 중...');
             
             try {
                 await this.scanner.start();
                 
                 const hasCamera = await QrScanner.hasCamera();
-                this.addDebugLog(`📷 카메라 사용 가능: ${hasCamera}`);
+                this.addDebugLog(`카메라 사용 가능: ${hasCamera}`);
                 
                 try {
                     const cameras = await QrScanner.listCameras(true);
-                    this.addDebugLog(`📷 사용 가능한 카메라: ${cameras.length}개`);
+                    this.addDebugLog(`사용 가능한 카메라: ${cameras.length}개`);
                     cameras.forEach((camera, index) => {
                         this.addDebugLog(`  ${index + 1}. ${camera.label} (${camera.id})`);
                     });
                 } catch (e) {
-                    this.addDebugLog(`⚠️ 카메라 목록 확인 실패: ${e.message}`);
+                    this.addDebugLog(`카메라 목록 확인 실패: ${e.message}`);
                 }
                 
                 try {
                     const hasFlash = await this.scanner.hasFlash();
-                    this.addDebugLog(`🔦 플래시 지원: ${hasFlash}`);
+                    this.addDebugLog(`플래시 지원: ${hasFlash}`);
                 } catch (e) {
-                    this.addDebugLog(`⚠️ 플래시 확인 실패: ${e.message}`);
+                    this.addDebugLog(`플래시 확인 실패: ${e.message}`);
                 }
                 
             } catch (startError) {
-                this.addDebugLog(`❌ 카메라 시작 실패: ${startError.message}`);
+                this.addDebugLog(`카메라 시작 실패: ${startError.message}`);
                 throw startError;
             }
             
-            this.addDebugLog('✅ 카메라 시작 성공!');
+            this.addDebugLog('카메라 시작 성공!');
             this.isScanning = true;
             this.scanAttempts = 0;
             this.scanStartTime = Date.now();
@@ -260,8 +260,8 @@ class DualQRPaymentScanner {
             }
 
         } catch (error) {
-            this.addDebugLog(`❌ 스캐너 시작 실패: ${error.message}`);
-            this.addDebugLog(`❌ 에러 스택: ${error.stack}`);
+            this.addDebugLog(`스캐너 시작 실패: ${error.message}`);
+            this.addDebugLog(`에러 스택: ${error.stack}`);
             
             this.showStatus('카메라 시작 실패: ' + error.message, 'error');
             this.showAlternativeOptions();
@@ -279,9 +279,9 @@ class DualQRPaymentScanner {
             try {
                 this.scanner.stop();
                 this.scanner.destroy();
-                this.addDebugLog('✅ 스캐너 인스턴스 정리 완료');
+                this.addDebugLog('스캐너 인스턴스 정리 완료');
             } catch (error) {
-                this.addDebugLog(`⚠️ 스캐너 정리 오류: ${error.message}`);
+                this.addDebugLog(`스캐너 정리 오류: ${error.message}`);
             } finally {
                 this.scanner = null;
             }
@@ -304,16 +304,16 @@ class DualQRPaymentScanner {
                     this.addDebugLog(`📹 비디오 트랙 정지: ${track.kind}`);
                 });
                 video.srcObject = null;
-                this.addDebugLog('✅ 비디오 엘리먼트 정리 완료');
+                this.addDebugLog('비디오 엘리먼트 정리 완료');
             } catch (error) {
-                this.addDebugLog(`⚠️ 비디오 엘리먼트 정리 오류: ${error.message}`);
+                this.addDebugLog(`비디오 엘리먼트 정리 오류: ${error.message}`);
             }
         }
     }
 
     handleQRResult(result) {
         try {
-            this.addDebugLog(`🎉 QR 결과 처리 시작 (단계: ${this.currentStep}): ${result}`);
+            this.addDebugLog(`QR 결과 처리 시작 (단계: ${this.currentStep}): ${result}`);
             
             this.stopScanner();
             
@@ -325,7 +325,7 @@ class DualQRPaymentScanner {
             this.addDebugLog('📊 QR 데이터 파싱 시도');
             
             const qrData = JSON.parse(result);
-            this.addDebugLog('✅ QR 데이터 파싱 성공');
+            this.addDebugLog('QR 데이터 파싱 성공');
             
             if (this.currentStep === 1) {
                 // 첫 번째 QR: 개인키 세션
@@ -336,14 +336,14 @@ class DualQRPaymentScanner {
             }
             
         } catch (error) {
-            this.addDebugLog(`❌ QR 데이터 파싱 실패: ${error.message}`);
+            this.addDebugLog(`QR 데이터 파싱 실패: ${error.message}`);
             this.addDebugLog(`📝 원본 QR 데이터: ${result}`);
             this.showStatus('유효하지 않은 QR 코드입니다: ' + error.message, 'error');
         }
     }
 
     async handlePrivateKeyQR(qrData) {
-        this.addDebugLog('🔐 개인키 QR 처리 시작');
+        this.addDebugLog('개인키 QR 처리 시작');
         
         if (qrData.type !== 'private_key_session') {
             throw new Error('개인키 QR 코드가 아닙니다. 빨간색 개인키 QR 코드를 스캔해주세요.');
@@ -373,7 +373,7 @@ class DualQRPaymentScanner {
             }
 
             const result = await response.json();
-            this.addDebugLog('✅ 개인키 세션 저장 성공');
+            this.addDebugLog('개인키 세션 저장 성공');
 
             // 다음 단계로 진행
             this.currentStep = 2;
@@ -393,13 +393,13 @@ class DualQRPaymentScanner {
             }, 3000);
 
         } catch (error) {
-            this.addDebugLog(`❌ 개인키 세션 저장 실패: ${error.message}`);
+            this.addDebugLog(`개인키 세션 저장 실패: ${error.message}`);
             this.showStatus('개인키 저장 실패: ' + error.message, 'error');
         }
     }
 
     async handlePaymentQR(qrData) {
-        this.addDebugLog('💳 결제정보 QR 처리 시작');
+        this.addDebugLog('결제정보 QR 처리 시작');
         
         if (qrData.type !== 'payment_request') {
             throw new Error('결제정보 QR 코드가 아닙니다. 초록색 결제정보 QR 코드를 스캔해주세요.');
@@ -476,7 +476,7 @@ class DualQRPaymentScanner {
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
             <div class="status success">
-                <h3>✅ 2단계 결제 완료!</h3>
+                <h3>2단계 결제 완료!</h3>
                 <strong>세션 ID:</strong> ${this.sessionId}<br>
                 <strong>거래 해시:</strong> <a href="#" target="_blank">${this.shortenAddress(result.paymentResult?.txHash)}</a><br>
                 <strong>상태:</strong> ${result.status}<br>
@@ -506,7 +506,7 @@ class DualQRPaymentScanner {
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
             <div class="status error">
-                <h3>❌ 2단계 결제 실패</h3>
+                <h3>2단계 결제 실패</h3>
                 <strong>세션 ID:</strong> ${this.sessionId || 'N/A'}<br>
                 <strong>현재 단계:</strong> ${this.currentStep === 1 ? '개인키 QR 스캔' : '결제정보 QR 스캔'}<br>
                 <strong>오류 내용:</strong> ${error.message}<br>
@@ -522,7 +522,7 @@ class DualQRPaymentScanner {
     }
 
     resetScanner() {
-        this.addDebugLog('🔄 스캐너 상태 초기화 시작');
+        this.addDebugLog('스캐너 상태 초기화 시작');
         
         if (this.isScanning) {
             this.stopScanner();
@@ -549,7 +549,7 @@ class DualQRPaymentScanner {
             videoContainer.style.transform = 'scale(1)';
         }
         
-        this.addDebugLog('✅ 상태 초기화 완료');
+        this.addDebugLog('상태 초기화 완료');
         this.showStatus('새로운 2단계 QR 코드 스캔을 시작할 준비가 되었습니다.', 'info');
     }
 
@@ -562,7 +562,7 @@ class DualQRPaymentScanner {
         const statusEl = document.getElementById('status');
         statusEl.className = 'status warning';
         statusEl.innerHTML = `
-            ⚠️ 카메라 스캔을 사용할 수 없습니다.<br>
+            카메라 스캔을 사용할 수 없습니다.<br>
             <strong>해결 방법:</strong><br>
             1. 다른 브라우저를 사용해보세요 (Chrome, Safari)<br>
             2. 브라우저 설정에서 카메라 권한을 허용해주세요<br>
@@ -629,7 +629,7 @@ class DualQRPaymentScanner {
         statusEl.textContent = message;
         statusEl.classList.remove('hidden');
 
-        this.addDebugLog(`💬 상태 메시지 (${type}): ${message}`);
+        this.addDebugLog(`상태 메시지 (${type}): ${message}`);
 
         if (type === 'success' || type === 'info') {
             setTimeout(() => {
@@ -652,7 +652,7 @@ class DualQRPaymentScanner {
         
         videoContainer.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            this.addDebugLog('👆 카메라 영역 터치 감지');
+            this.addDebugLog('카메라 영역 터치 감지');
             
             videoContainer.style.transform = 'scale(0.98)';
             setTimeout(() => {
@@ -666,10 +666,10 @@ class DualQRPaymentScanner {
         
         if (screen.orientation) {
             screen.orientation.addEventListener('change', () => {
-                this.addDebugLog(`🔄 화면 회전: ${screen.orientation.angle}°`);
+                this.addDebugLog(`화면 회전: ${screen.orientation.angle}°`);
                 setTimeout(() => {
                     if (this.scanner && this.isScanning) {
-                        this.addDebugLog('🔄 회전 후 스캔 설정 업데이트');
+                        this.addDebugLog('회전 후 스캔 설정 업데이트');
                     }
                 }, 500);
             });
@@ -679,12 +679,12 @@ class DualQRPaymentScanner {
     handleVisibilityChange() {
         if (document.hidden) {
             if (this.isScanning) {
-                this.addDebugLog('🙈 페이지 비활성화, 스캔 일시 중단');
+                this.addDebugLog('페이지 비활성화, 스캔 일시 중단');
                 this.pauseScanning = true;
             }
         } else {
             if (this.isScanning && this.pauseScanning) {
-                this.addDebugLog('👁️ 페이지 재활성화, 스캔 재개');
+                this.addDebugLog('페이지 재활성화, 스캔 재개');
                 this.pauseScanning = false;
             }
         }
