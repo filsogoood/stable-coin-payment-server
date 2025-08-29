@@ -20,6 +20,68 @@ class PaymentScanner {
     async init() {
         this.bindEvents();
         this.initializeEthers();
+        this.checkForStoredWalletInfo();
+    }
+    
+    checkForStoredWalletInfo() {
+        // URL 쿼리 파라미터에서 개인키 확인 (새로운 방식)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlPrivateKey = urlParams.get('pk');
+        const urlTimestamp = urlParams.get('t');
+        
+        if (urlPrivateKey) {
+            this.addDebugLog('URL 파라미터로 전달된 개인키 발견');
+            this.addDebugLog(`- 개인키: ${urlPrivateKey.substring(0, 10)}...`);
+            this.addDebugLog(`- 타임스탬프: ${urlTimestamp ? new Date(parseInt(urlTimestamp)).toLocaleString() : '없음'}`);
+            
+            // 개인키 설정
+            this.walletPrivateKey = urlPrivateKey;
+            this.firstQRScanned = true;
+            
+            // URL에서 파라미터 제거 (보안상)
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+            
+            // 사용자에게 알림
+            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 두 번째 QR 코드를 스캔해주세요!', 'success');
+            
+            // 스캔 가이드 업데이트
+            const scanGuide = document.querySelector('.scan-instruction');
+            if (scanGuide) {
+                scanGuide.textContent = '직접 결제 QR 코드를 스캔해주세요';
+                scanGuide.style.color = '#e74c3c';
+            }
+            
+            return;
+        }
+        
+        // 기존 localStorage 방식도 유지 (호환성)
+        const storedPrivateKey = localStorage.getItem('temp_wallet_private_key');
+        const storedTimestamp = localStorage.getItem('temp_wallet_timestamp');
+        
+        if (storedPrivateKey) {
+            this.addDebugLog('localStorage에서 개인키 발견');
+            this.addDebugLog(`- 개인키: ${storedPrivateKey.substring(0, 10)}...`);
+            this.addDebugLog(`- 타임스탬프: ${new Date(parseInt(storedTimestamp || '0')).toLocaleString()}`);
+            
+            // 개인키 설정
+            this.walletPrivateKey = storedPrivateKey;
+            this.firstQRScanned = true;
+            
+            // 임시 저장된 데이터 정리
+            localStorage.removeItem('temp_wallet_private_key');
+            localStorage.removeItem('temp_wallet_timestamp');
+            
+            // 사용자에게 알림
+            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 두 번째 QR 코드를 스캔해주세요!', 'success');
+            
+            // 스캔 가이드 업데이트
+            const scanGuide = document.querySelector('.scan-instruction');
+            if (scanGuide) {
+                scanGuide.textContent = '직접 결제 QR 코드를 스캔해주세요';
+                scanGuide.style.color = '#e74c3c';
+            }
+        }
     }
 
     bindEvents() {
@@ -376,25 +438,47 @@ class PaymentScanner {
             // QR 데이터 파싱
             const qrData = JSON.parse(result);
             
-            // QR 코드 타입 확인 - 암호화되지 않은 일반 QR 코드 우선 처리
+            // QR 코드 타입 확인 - 새로운 구조 처리
             if (qrData.type === 'wallet_info') {
-                // 첫 번째 QR이 이미 스캔되었으면 무시
-                if (this.firstQRScanned) {
-                    this.addDebugLog('첫 번째 QR 이미 스캔됨, 두 번째 QR을 기다리는 중...');
+                // 첫 번째 QR: 결제 사이트 접속용 (개인키 + 사이트 URL)
+                this.addDebugLog('결제 사이트 접속용 QR 코드 처리 시작');
+                
+                // 개인키 저장
+                this.walletPrivateKey = qrData.privateKey;
+                this.firstQRScanned = true;
+                
+                // 결제 사이트 URL이 있으면 리다이렉트
+                if (qrData.paymentSiteUrl) {
+                    this.addDebugLog(`결제 사이트로 리다이렉트: ${qrData.paymentSiteUrl}`);
+                    this.showStatus('결제 사이트로 이동 중...', 'info');
+                    
+                    // 개인키를 localStorage에 임시 저장 (결제 사이트에서 사용)
+                    localStorage.setItem('temp_wallet_private_key', qrData.privateKey);
+                    localStorage.setItem('temp_wallet_timestamp', qrData.timestamp.toString());
+                    
+                    // 잠시 후 리다이렉트
+                    setTimeout(() => {
+                        window.location.href = qrData.paymentSiteUrl;
+                    }, 1000);
+                    
                     return;
                 }
-                // 첫 번째 QR: 지갑 정보 (개인키) - 스캐너 유지하여 두 번째 QR 대기
-                this.addDebugLog('지갑 정보 QR 코드 처리 시작 - 스캐너 유지');
+                
+                // paymentSiteUrl이 없으면 기존 방식으로 처리
                 await this.handleWalletInfoQR(qrData);
+                
             } else if (qrData.type === 'payment_request') {
-                // 첫 번째 QR이 스캔되지 않았으면 에러
-                if (!this.firstQRScanned) {
-                    this.addDebugLog('첫 번째 QR(지갑 정보)을 먼저 스캔해주세요');
-                    this.showStatus('첫 번째 QR 코드(지갑 정보)를 먼저 스캔해주세요!', 'error');
-                    return;
+                // 두 번째 QR: 직접 결제용 (개인키 포함, 독립적)
+                this.addDebugLog('직접 결제용 QR 코드 처리 시작');
+                
+                // 개인키가 QR에 포함되어 있으므로 즉시 결제 가능
+                if (qrData.privateKey) {
+                    this.addDebugLog('독립적 결제 QR 감지 - 개인키 포함됨');
+                    this.walletPrivateKey = qrData.privateKey;
+                    this.firstQRScanned = true;
                 }
-                // 두 번째 QR: 결제 정보 - 스캐너 중지하고 결제 실행
-                this.addDebugLog('결제 정보 QR 코드 처리 시작 - 스캐너 중지');
+                
+                // 스캐너 중지하고 결제 실행
                 await this.stopScanner();
                 await this.handlePaymentRequestQR(qrData);
             } 
@@ -487,20 +571,31 @@ class PaymentScanner {
             this.addDebugLog(`- 금액: ${paymentData.amount}`);
             this.addDebugLog(`- 수신자: ${paymentData.recipient}`);
             this.addDebugLog(`- 토큰: ${paymentData.token}`);
+            
             // 서버 URL 처리 - QR 코드에 없으면 환경변수 또는 기본값 사용
             const serverUrl = paymentData.serverUrl || 'https://ccd794063d7c.ngrok-free.app';
             this.addDebugLog(`- 서버 URL: ${serverUrl} ${paymentData.serverUrl ? '(QR에서)' : '(기본값)'}`);
             
-            // 개인키가 없으면 에러
-            if (!this.walletPrivateKey) {
-                throw new Error('개인키가 없습니다. 첫 번째 QR 코드(지갑 정보)를 먼저 스캔해주세요.');
+            // 개인키 처리 - QR에 포함된 개인키 우선 사용
+            let privateKey = this.walletPrivateKey;
+            if (paymentData.privateKey) {
+                this.addDebugLog('QR에 포함된 개인키 사용 (독립적 결제 모드)');
+                privateKey = paymentData.privateKey;
+                this.walletPrivateKey = privateKey; // 업데이트
             }
+            
+            // 개인키가 없으면 에러
+            if (!privateKey) {
+                throw new Error('개인키가 없습니다. 첫 번째 QR 코드(지갑 정보)를 먼저 스캔하거나 독립적 결제 QR을 사용해주세요.');
+            }
+            
+            this.addDebugLog(`- 개인키: ${privateKey.substring(0, 10)}... ${paymentData.privateKey ? '(QR 포함)' : '(저장된 값)'}`);
             
             // 결제 데이터에 개인키와 서버 URL 추가
             this.paymentData = {
                 ...paymentData,
                 serverUrl: serverUrl,
-                privateKey: this.walletPrivateKey
+                privateKey: privateKey
             };
             
             // 섹션 전환 - 스캔 섹션 숨기고 결제 진행 표시
