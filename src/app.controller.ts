@@ -31,4 +31,40 @@ export class AppController {
   async gaslessPayment(@Body() body: any) {
     return this.appService.gaslessPayment(body);
   }
+
+  // QR 스캔 결제 - 개인키 세션 저장
+  @Post('scan/private-key')
+  async storePrivateKeySession(@Body() body: any) {
+    return this.appService.storePrivateKeySession(body);
+  }
+
+  // QR 스캔 결제 - 결제 실행
+  @Post('scan/payment')
+  async scanPayment(@Body() body: any) {
+    return this.appService.scanPayment(body);
+  }
+
+  // 영수증 인쇄 요청
+  @Post('receipt/print')
+  async printReceipt(@Body() body: any) {
+    return this.appService.printReceipt(body);
+  }
+
+  // 인쇄 대기열 조회 (Android APP 폴링용)
+  @Get('api/receipt/queue')
+  async getPrintQueue() {
+    return this.appService.getPrintQueue();
+  }
+
+  // 인쇄 상태 업데이트 (Android APP에서 인쇄 완료/실패 알림)
+  @Post('api/receipt/status')
+  async updatePrintStatus(@Body() body: { printId: string; status: string; errorMessage?: string }) {
+    return this.appService.updatePrintStatus(body.printId, body.status as any, body.errorMessage);
+  }
+
+  // 인쇄 대기열 통계
+  @Get('api/receipt/stats')
+  async getPrintQueueStats() {
+    return this.appService.getPrintQueueStats();
+  }
 }

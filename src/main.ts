@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import * as iconv from 'iconv-lite';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { json } from 'express';
 
 const envPath = path.resolve(process.cwd(), '.env'); // CWD가 다르면 엉뚱한 .env 읽음
 const parsed = dotenv.parse(fs.readFileSync(envPath));

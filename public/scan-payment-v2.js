@@ -484,9 +484,51 @@ class DualQRPaymentScanner {
             </div>
             <div class="status info mt-2">
                 2단계 가스리스 결제가 성공적으로 완료되었습니다!<br>
-                개인키와 결제정보가 안전하게 처리되었습니다.
+                개인키와 결제정보가 안전하게 처리되었습니다.<br>
+                영수증이 자동으로 인쇄됩니다.
             </div>
         `;
+
+        // 영수증 인쇄 호출 (서버에서 자동으로 처리되지만 프론트엔드에서도 추가 호출 가능)
+        this.requestReceiptPrint(result);
+    }
+
+    async requestReceiptPrint(paymentResult) {
+        try {
+            this.addDebugLog('영수증 인쇄 요청 시작');
+            
+            const receiptData = {
+                txHash: paymentResult.paymentResult?.txHash || paymentResult.txHash,
+                amount: this.paymentData?.amount || 'N/A',
+                token: this.paymentData?.token || 'N/A',
+                from: 'QR_SCAN_USER',
+                to: this.paymentData?.recipient || 'N/A',
+                timestamp: new Date().toISOString(),
+                status: 'success',
+                sessionId: this.sessionId,
+            };
+
+            const response = await fetch('/receipt/print', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(receiptData)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                this.addDebugLog(`영수증 인쇄 요청 성공: ${result.message}`);
+                this.showStatus('영수증 인쇄가 요청되었습니다.', 'success');
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+        } catch (error) {
+            this.addDebugLog(`영수증 인쇄 요청 실패: ${error.message}`);
+            this.showStatus('영수증 인쇄 요청에 실패했습니다.', 'warning');
+            // 영수증 인쇄 실패는 결제 성공에 영향을 주지 않음
+        }
     }
 
     updatePaymentProgress(message) {
