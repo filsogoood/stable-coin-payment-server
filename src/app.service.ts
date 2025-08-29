@@ -16,6 +16,7 @@ interface ReceiptData {
   to: string;
   timestamp: string;
   status: string;
+  productName?: string; // 상품명 추가
   sessionId?: string;
 }
 
@@ -341,6 +342,7 @@ export class AppService {
         to: transfer.to,
         timestamp: new Date().toISOString(),
         status: 'success',
+        productName: '아메리카노', // 상품명 추가
       });
     } catch (printError: any) {
       this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
@@ -445,11 +447,13 @@ export class AppService {
                         this.printReceipt({
                           txHash: parsedResult.txHash,
                           amount: qrData.amountWei,
-                          token: qrData.token,
+                          token: 
+                          qrData.token,
                           from: 'GASLESS_USER', // 가스리스 결제의 경우
                           to: qrData.to,
                           timestamp: new Date().toISOString(),
                           status: 'success',
+                          productName: '아메리카노', // 상품명 추가
                         }).catch(printError => {
                           this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
                           // 영수증 인쇄 실패해도 결제 성공은 유지
@@ -496,6 +500,7 @@ export class AppService {
                   to: qrData.to,
                   timestamp: new Date().toISOString(),
                   status: 'success',
+                  productName: '아메리카노', // 상품명 추가
                 }).catch(printError => {
                   this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
                   // 영수증 인쇄 실패해도 결제 성공은 유지
@@ -628,6 +633,7 @@ export class AppService {
           to: paymentResult.recipient,
           timestamp: paymentResult.timestamp,
           status: 'success',
+          productName: '아메리카노', // 상품명 추가
           sessionId: paymentResult.sessionId,
         });
       } catch (printError: any) {
@@ -705,6 +711,7 @@ export class AppService {
           fromAddress: item.receiptData.from,
           toAddress: item.receiptData.to,
           timestamp: item.receiptData.timestamp,
+          productName: item.receiptData.productName || '아메리카노', // 상품명 추가
           createdAt: item.createdAt,
           attemptCount: item.attemptCount,
         })),
