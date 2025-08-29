@@ -407,9 +407,9 @@ export class AppService {
 
               // server: 줄을 찾았지만 txHash가 없는 경우, logs에서 txHash 추출 시도
               if (parsedResult && !parsedResult.txHash) {
-                const txHashMatch = stdout.match(/txHash['":\s]*['"]?([0-9a-fA-F]{64})['"]?/);
+                const txHashMatch = stdout.match(/txHash['":\s]*['"]?(0x[0-9a-fA-F]{64})['"]?/);
                 if (txHashMatch && txHashMatch[1]) {
-                  parsedResult.txHash = '0x' + txHashMatch[1];
+                  parsedResult.txHash = txHashMatch[1];
                   this.logger.log(`[EXTRACT_TXHASH] Extracted txHash from logs: ${parsedResult.txHash}`);
                   return resolve(parsedResult);
                 }
@@ -423,9 +423,9 @@ export class AppService {
               };
               
               // logs에서 txHash 추출 시도
-              const txHashMatch = stdout.match(/txHash['":\s]*['"]?([0-9a-fA-F]{64})['"]?/);
+              const txHashMatch = stdout.match(/txHash['":\s]*['"]?(0x[0-9a-fA-F]{64})['"]?/);
               if (txHashMatch && txHashMatch[1]) {
-                response['txHash'] = '0x' + txHashMatch[1];
+                response['txHash'] = txHashMatch[1];
                 this.logger.log(`[FALLBACK_TXHASH] Extracted txHash: ${response['txHash']}`);
               }
               

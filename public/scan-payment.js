@@ -867,7 +867,7 @@ class PaymentScanner {
         resultInfo.innerHTML = `
             <div class="status success">
                 <h3>결제 완료!</h3>
-                <strong>거래 해시:</strong> <a href="#" target="_blank">${this.shortenAddress(result.txHash)}</a><br>
+                <strong>거래 해시:</strong> ${result.txHash}<br>
                 <strong>상태:</strong> ${result.status}<br>
                 <strong>완료 시간:</strong> ${new Date().toLocaleString()}
             </div>
