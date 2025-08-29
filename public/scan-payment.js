@@ -863,11 +863,53 @@ class PaymentScanner {
         // 결과 섹션 표시
         document.getElementById('resultSection').classList.remove('hidden');
         
+        // 토큰 주소를 심볼로 변환하는 함수
+        const getTokenSymbol = (tokenAddress) => {
+            const tokenSymbols = {
+                '0x29756cc': 'USDT',
+                '0xa0b86a33e6885a31c806e95ec8298630': 'USDC',
+                '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
+                '0xa0b86a33e6885a31c806e95e8c8298630': 'USDC'
+            };
+            
+            if (!tokenAddress) return 'TOKEN';
+            
+            // 정확한 매칭 시도
+            const symbol = tokenSymbols[tokenAddress.toLowerCase()];
+            if (symbol) return symbol;
+            
+            // 부분 매칭 시도 (주소의 일부가 포함된 경우)
+            for (const [addr, sym] of Object.entries(tokenSymbols)) {
+                if (tokenAddress.toLowerCase().includes(addr.toLowerCase()) || 
+                    addr.toLowerCase().includes(tokenAddress.toLowerCase())) {
+                    return sym;
+                }
+            }
+            
+            return 'TOKEN';
+        };
+        
+        // 금액과 토큰 정보 가져오기 (QR 데이터에서)
+        const formatAmount = (amountWei) => {
+            try {
+                // Wei에서 Ether로 변환 (18 decimals)
+                const ethAmount = Number(amountWei) / Math.pow(10, 18);
+                return ethAmount.toFixed(6).replace(/\.?0+$/, ''); // 소수점 뒤 불필요한 0 제거
+            } catch (e) {
+                return amountWei; // 변환 실패시 원본 반환
+            }
+        };
+        
+        const amount = this.qrData?.amountWei ? formatAmount(this.qrData.amountWei) : 'N/A';
+        const token = this.qrData?.token || '';
+        const tokenSymbol = getTokenSymbol(token);
+        
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
             <div class="status success">
                 <h3>결제 완료!</h3>
-                <strong>거래 해시:</strong> ${result.txHash}<br>
+                <strong>거래 해시:</strong> <span style="word-break: break-all;">${result.txHash}</span><br>
+                <strong>결제 금액:</strong> ${amount} ${tokenSymbol}<br>
                 <strong>상태:</strong> ${result.status}<br>
                 <strong>완료 시간:</strong> ${new Date().toLocaleString()}
             </div>
@@ -950,6 +992,12 @@ class PaymentScanner {
 
     shortenAddress(address) {
         if (!address) return '';
+        // 거래 해시는 전체 표시, 주소만 축약
+        if (address.length === 66 && address.startsWith('0x')) {
+            // 거래 해시인 경우 전체 표시
+            return address;
+        }
+        // 주소인 경우에만 축약
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     }
 

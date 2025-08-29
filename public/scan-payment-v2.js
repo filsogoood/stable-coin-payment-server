@@ -474,11 +474,44 @@ class DualQRPaymentScanner {
         document.getElementById('resultSection').classList.remove('hidden');
         
         const resultInfo = document.getElementById('resultInfo');
+        
+        // 토큰 주소를 심볼로 변환하는 함수
+        const getTokenSymbol = (tokenAddress) => {
+            const tokenSymbols = {
+                '0x29756cc': 'USDT',
+                '0xa0b86a33e6885a31c806e95ec8298630': 'USDC',
+                '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
+                '0xa0b86a33e6885a31c806e95e8c8298630': 'USDC'
+            };
+            
+            if (!tokenAddress) return 'TOKEN';
+            
+            // 정확한 매칭 시도
+            const symbol = tokenSymbols[tokenAddress.toLowerCase()];
+            if (symbol) return symbol;
+            
+            // 부분 매칭 시도 (주소의 일부가 포함된 경우)
+            for (const [addr, sym] of Object.entries(tokenSymbols)) {
+                if (tokenAddress.toLowerCase().includes(addr.toLowerCase()) || 
+                    addr.toLowerCase().includes(tokenAddress.toLowerCase())) {
+                    return sym;
+                }
+            }
+            
+            return 'TOKEN';
+        };
+        
+        // 금액과 토큰 정보 가져오기
+        const amount = this.paymentData?.amount || 'N/A';
+        const token = this.paymentData?.token || '';
+        const tokenSymbol = getTokenSymbol(token);
+        
         resultInfo.innerHTML = `
             <div class="status success">
                 <h3>2단계 결제 완료!</h3>
                 <strong>세션 ID:</strong> ${this.sessionId}<br>
-                <strong>거래 해시:</strong> <a href="#" target="_blank">${this.shortenAddress(result.paymentResult?.txHash)}</a><br>
+                <strong>거래 해시:</strong> <span style="word-break: break-all;">${this.shortenAddress(result.paymentResult?.txHash)}</span><br>
+                <strong>결제 금액:</strong> ${amount} ${tokenSymbol}<br>
                 <strong>상태:</strong> ${result.status}<br>
                 <strong>완료 시간:</strong> ${new Date().toLocaleString()}
             </div>
@@ -597,6 +630,12 @@ class DualQRPaymentScanner {
 
     shortenAddress(address) {
         if (!address) return '';
+        // 거래 해시는 전체 표시, 주소만 축약
+        if (address.length === 66 && address.startsWith('0x')) {
+            // 거래 해시인 경우 전체 표시
+            return address;
+        }
+        // 주소인 경우에만 축약
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     }
 

@@ -66,9 +66,17 @@ export class AppService {
     return !!a && !!b && a.toLowerCase() === b.toLowerCase();
   }
   private short(h?: string, n = 6) {
-    return !h || !h.startsWith('0x')
-      ? String(h)
-      : `${h.slice(0, 2 + n)}…${h.slice(-n)}`;
+    if (!h || !h.startsWith('0x')) {
+      return String(h);
+    }
+    
+    // 거래 해시인 경우 (길이가 66인 경우) 전체 표시
+    if (h.length === 66) {
+      return h;
+    }
+    
+    // 주소인 경우에만 축약
+    return `${h.slice(0, 2 + n)}…${h.slice(-n)}`;
   }
   private j(obj: any) {
     return JSON.stringify(
@@ -332,22 +340,8 @@ export class AppService {
 
     const result = { status: 'ok', txHash: tx.hash };
 
-    // 결제 성공 후 영수증 인쇄 호출
-    try {
-      await this.printReceipt({
-        txHash: tx.hash,
-        amount: transfer.amount,
-        token: transfer.token,
-        from: transfer.from,
-        to: transfer.to,
-        timestamp: new Date().toISOString(),
-        status: 'success',
-        productName: '아메리카노', // 상품명 추가
-      });
-    } catch (printError: any) {
-      this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
-      // 영수증 인쇄 실패해도 결제 성공은 유지
-    }
+    // 영수증 인쇄는 호출자에서 처리하도록 변경
+    // (gaslessPayment, scanPayment 등에서 각각 처리)
 
     return result;
   }
@@ -430,10 +424,13 @@ export class AppService {
 
             // stdout에서 결과 파싱 시도
             try {
+              // 먼저 txHash를 추출하여 중복 인쇄 방지
+              let extractedTxHash: string | null = null;
+              
+              // 1. server: 줄에서 txHash 추출 시도
               const lines = stdout.split('\n');
               let parsedResult: any = null;
               
-              // 먼저 "server:"가 포함된 줄을 찾기
               for (const line of lines) {
                 if (line.includes('server:')) {
                   this.logger.log(`[PARSE_DEBUG] Found server line: ${line}`);
@@ -443,23 +440,8 @@ export class AppService {
                       parsedResult = JSON.parse(jsonMatch[1]);
                       this.logger.log(`[PARSE_SUCCESS] Parsed result: ${JSON.stringify(parsedResult)}`);
                       if (parsedResult && parsedResult.txHash) {
-                        // 영수증 인쇄 호출 (비동기 처리하지만 결제 성공에 영향 없음)
-                        this.printReceipt({
-                          txHash: parsedResult.txHash,
-                          amount: qrData.amountWei,
-                          token: 
-                          qrData.token,
-                          from: 'GASLESS_USER', // 가스리스 결제의 경우
-                          to: qrData.to,
-                          timestamp: new Date().toISOString(),
-                          status: 'success',
-                          productName: '아메리카노', // 상품명 추가
-                        }).catch(printError => {
-                          this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
-                          // 영수증 인쇄 실패해도 결제 성공은 유지
-                        });
-                        resolve(parsedResult);
-                        return; // 성공 처리 후 함수 종료하여 fallback 로직 실행 방지
+                        extractedTxHash = parsedResult.txHash;
+                        break; // txHash를 찾았으므로 루프 종료
                       }
                     } catch (parseError: any) {
                       this.logger.warn(`[PARSE_ERROR] JSON parse failed: ${parseError.message}`);
@@ -469,33 +451,20 @@ export class AppService {
                 }
               }
 
-              // server: 줄을 찾았지만 txHash가 없는 경우, logs에서 txHash 추출 시도
-              if (parsedResult && !parsedResult.txHash) {
+              // 2. server 줄에서 txHash를 찾지 못한 경우, logs에서 직접 추출
+              if (!extractedTxHash) {
                 const txHashMatch = stdout.match(/txHash['":\s]*['"]?(0x[0-9a-fA-F]{64})['"]?/);
                 if (txHashMatch && txHashMatch[1]) {
-                  parsedResult.txHash = txHashMatch[1];
-                  this.logger.log(`[EXTRACT_TXHASH] Extracted txHash from logs: ${parsedResult.txHash}`);
-                  resolve(parsedResult);
-                  return; // 성공 처리 후 함수 종료하여 fallback 로직 실행 방지
+                  extractedTxHash = txHashMatch[1];
+                  this.logger.log(`[EXTRACT_TXHASH] Extracted txHash from logs: ${extractedTxHash}`);
                 }
               }
 
-              // 기본 성공 응답 (logs 포함하여 프론트엔드에서 추가 파싱 가능)
-              const response = {
-                status: 'ok',
-                message: '가스리스 결제가 성공적으로 처리되었습니다.',
-                logs: stdout,
-              };
-              
-              // logs에서 txHash 추출 시도
-              const txHashMatch = stdout.match(/txHash['":\s]*['"]?(0x[0-9a-fA-F]{64})['"]?/);
-              if (txHashMatch && txHashMatch[1]) {
-                response['txHash'] = txHashMatch[1];
-                this.logger.log(`[FALLBACK_TXHASH] Extracted txHash: ${response['txHash']}`);
-                
-                // 영수증 인쇄 호출 (비동기 처리하지만 결제 성공에 영향 없음)
+              // 3. txHash가 있으면 한 번만 영수증 인쇄
+              if (extractedTxHash) {
+                this.logger.log(`[SINGLE_RECEIPT_PRINT] 영수증 한 번만 인쇄 - txHash: ${extractedTxHash}`);
                 this.printReceipt({
-                  txHash: response['txHash'],
+                  txHash: extractedTxHash,
                   amount: qrData.amountWei,
                   token: qrData.token,
                   from: 'GASLESS_USER', // 가스리스 결제의 경우
@@ -508,8 +477,23 @@ export class AppService {
                   // 영수증 인쇄 실패해도 결제 성공은 유지
                 });
               }
-              
-              resolve(response);
+
+              // 4. 응답 반환
+              if (parsedResult && extractedTxHash) {
+                resolve(parsedResult);
+              } else {
+                const response = {
+                  status: 'ok',
+                  message: '가스리스 결제가 성공적으로 처리되었습니다.',
+                  logs: stdout,
+                };
+                
+                if (extractedTxHash) {
+                  response['txHash'] = extractedTxHash;
+                }
+                
+                resolve(response);
+              }
             } catch (e) {
               this.logger.error(`[PARSE_EXCEPTION] ${e.message}`);
               resolve({
