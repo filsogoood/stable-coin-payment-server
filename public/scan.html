@@ -8,14 +8,9 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>🔐 2단계 QR 코드 스캔</h1>
-            <p>개인키와 결제정보가 분리된 2개의 QR 코드를 순서대로 스캔하여 안전한 가스리스 결제를 진행합니다</p>
-        </header>
-
         <main>
             <div class="qr-section">
-                <h2>📸 QR 코드 스캐너</h2>
+                <h2>QR 코드 스캐너</h2>
                 
                 <div id="scannerSection">
                     <div class="video-container">
@@ -55,33 +50,7 @@
                     <button id="newScanBtn" class="btn btn-primary">새로운 스캔</button>
                 </div>
             </div>
-
-            <div class="info-section">
-                <h3>💡 사용 방법</h3>
-                <ol>
-                    <li><strong>카메라 시작:</strong> "카메라 시작" 버튼을 클릭합니다</li>
-                    <li><strong>첫 번째 QR:</strong> 🔴 개인키 QR 코드를 스캔합니다 (안내 메시지 표시)</li>
-                    <li><strong>두 번째 QR:</strong> 🔴 결제정보 QR 코드를 스캔합니다 (자동 결제 실행)</li>
-                </ol>
-                
-                <div class="status info mt-2">
-                    <strong>🔐 2단계 보안:</strong> 개인키와 결제정보가 분리된 2개의 QR 코드를 순서대로 스캔합니다.
-                </div>
-                
-                <div class="status warning mt-2">
-                    <strong>⚠️ 주의:</strong> 두 번째 QR 스캔 시 결제가 실행되므로 신중하게 스캔해주세요.
-                </div>
-            </div>
-
-            <div class="text-center mt-3">
-                <a href="/" class="btn btn-secondary">홈으로 돌아가기</a>
-                <a href="/generate" class="btn btn-primary">QR 생성하러 가기</a>
-            </div>
         </main>
-
-        <footer>
-            <p>&copy; 2024 가스리스 결제 시스템</p>
-        </footer>
     </div>
 
     <!-- QR 스캐너 라이브러리 -->
