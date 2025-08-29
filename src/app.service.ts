@@ -240,7 +240,7 @@ export class AppService {
       ],
     );
     this.logger.debug(
-      `[calldata] len=${(calldata.length - 2) / 2}B hash=${this.short(ethers.keccak256(calldata))}`,
+      `[calldata] len=${(calldata.length - 2) / 2}B hash=${ethers.keccak256(calldata)}`,
     );
 
     // authorizationList
@@ -383,23 +383,55 @@ export class AppService {
             // stdout에서 결과 파싱 시도
             try {
               const lines = stdout.split('\n');
+              let parsedResult: any = null;
+              
+              // 먼저 "server:"가 포함된 줄을 찾기
               for (const line of lines) {
-                if (line.includes('server:') && line.includes('txHash')) {
+                if (line.includes('server:')) {
+                  this.logger.log(`[PARSE_DEBUG] Found server line: ${line}`);
                   const jsonMatch = line.match(/server:\s*({.*})/);
                   if (jsonMatch) {
-                    const result = JSON.parse(jsonMatch[1]);
-                    return resolve(result);
+                    try {
+                      parsedResult = JSON.parse(jsonMatch[1]);
+                      this.logger.log(`[PARSE_SUCCESS] Parsed result: ${JSON.stringify(parsedResult)}`);
+                      if (parsedResult && parsedResult.txHash) {
+                        return resolve(parsedResult);
+                      }
+                    } catch (parseError: any) {
+                      this.logger.warn(`[PARSE_ERROR] JSON parse failed: ${parseError.message}`);
+                      this.logger.warn(`[PARSE_ERROR] Raw JSON: ${jsonMatch[1]}`);
+                    }
                   }
                 }
               }
 
-              // 기본 성공 응답
-              resolve({
+              // server: 줄을 찾았지만 txHash가 없는 경우, logs에서 txHash 추출 시도
+              if (parsedResult && !parsedResult.txHash) {
+                const txHashMatch = stdout.match(/txHash['":\s]*['"]?([0-9a-fA-F]{64})['"]?/);
+                if (txHashMatch && txHashMatch[1]) {
+                  parsedResult.txHash = '0x' + txHashMatch[1];
+                  this.logger.log(`[EXTRACT_TXHASH] Extracted txHash from logs: ${parsedResult.txHash}`);
+                  return resolve(parsedResult);
+                }
+              }
+
+              // 기본 성공 응답 (logs 포함하여 프론트엔드에서 추가 파싱 가능)
+              const response = {
                 status: 'ok',
                 message: '가스리스 결제가 성공적으로 처리되었습니다.',
                 logs: stdout,
-              });
+              };
+              
+              // logs에서 txHash 추출 시도
+              const txHashMatch = stdout.match(/txHash['":\s]*['"]?([0-9a-fA-F]{64})['"]?/);
+              if (txHashMatch && txHashMatch[1]) {
+                response['txHash'] = '0x' + txHashMatch[1];
+                this.logger.log(`[FALLBACK_TXHASH] Extracted txHash: ${response['txHash']}`);
+              }
+              
+              resolve(response);
             } catch (e) {
+              this.logger.error(`[PARSE_EXCEPTION] ${e.message}`);
               resolve({
                 status: 'ok',
                 message: '가스리스 결제가 처리되었습니다.',
