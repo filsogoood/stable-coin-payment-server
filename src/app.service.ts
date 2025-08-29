@@ -458,7 +458,8 @@ export class AppService {
                           this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
                           // 영수증 인쇄 실패해도 결제 성공은 유지
                         });
-                        return resolve(parsedResult);
+                        resolve(parsedResult);
+                        return; // 성공 처리 후 함수 종료하여 fallback 로직 실행 방지
                       }
                     } catch (parseError: any) {
                       this.logger.warn(`[PARSE_ERROR] JSON parse failed: ${parseError.message}`);
@@ -474,7 +475,8 @@ export class AppService {
                 if (txHashMatch && txHashMatch[1]) {
                   parsedResult.txHash = txHashMatch[1];
                   this.logger.log(`[EXTRACT_TXHASH] Extracted txHash from logs: ${parsedResult.txHash}`);
-                  return resolve(parsedResult);
+                  resolve(parsedResult);
+                  return; // 성공 처리 후 함수 종료하여 fallback 로직 실행 방지
                 }
               }
 
