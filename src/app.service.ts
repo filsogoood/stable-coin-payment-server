@@ -130,10 +130,10 @@ export class AppService {
       const network = await this.provider.getNetwork();
       const chainId = Number(network?.chainId || 97);
       
-      // 알려진 EIP-7702 미지원 네트워크 확인
+      // 알려진 EIP-7702 미지원 네트워크 확인 (BSC는 지원한다고 하니 제외)
       const unsupportedChainIds = [
-        56,     // BSC Mainnet
-        97,     // BSC Testnet
+        // 56,     // BSC Mainnet - 사용자가 지원한다고 확인
+        // 97,     // BSC Testnet - 사용자가 지원한다고 확인
         137,    // Polygon Mainnet
         80001,  // Polygon Mumbai (deprecated)
         80002,  // Polygon Amoy
