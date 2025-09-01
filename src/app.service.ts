@@ -578,6 +578,15 @@ export class AppService {
     }
 
     this.logger.log('[PAYMENT] 트랜잭션 전송 시작');
+
+    // 최소 가스 설정 (BSC 테스트넷 요구사항 충족)
+    const maxPriorityFeePerGas = BigInt(1); // 최소값 1 wei
+    const maxFeePerGas = BigInt(3000000000); // 3 gwei (안전한 최소값)
+
+    this.logger.debug('[PAYMENT] 가스 설정:', {
+      maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
+      maxFeePerGas: maxFeePerGas.toString()
+    });
     
     // send
     const tx = await this.relayer.sendTransaction({
@@ -585,6 +594,8 @@ export class AppService {
       data: calldata,
       type: 4,
       authorizationList: authList as any,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
     });
     
     this.logger.log('[PAYMENT] 트랜잭션 전송 완료:', {
@@ -595,14 +606,71 @@ export class AppService {
 
     try {
       this.logger.log('[PAYMENT] 트랜잭션 채굴 대기 중...');
-      const rc = await tx.wait();
-      this.logger.log('[PAYMENT] 트랜잭션 채굴 완료:', {
-        status: rc?.status,
-        gasUsed: rc?.gasUsed?.toString(),
-        blockNumber: rc?.blockNumber
+      
+      // 타임아웃 설정 (30초)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 30000);
       });
+      
+      const rc = await Promise.race([
+        tx.wait() as Promise<ethers.TransactionReceipt | null>,
+        timeoutPromise
+      ]);
+      
+      if (rc) {
+        this.logger.log('[PAYMENT] 트랜잭션 채굴 완료:', {
+          status: rc.status,
+          gasUsed: rc.gasUsed?.toString(),
+          blockNumber: rc.blockNumber,
+          txHash: tx.hash
+        });
+        
+        // 트랜잭션 실패 시 상세 로그
+        if (rc.status === 0) {
+          this.logger.error('[PAYMENT] 트랜잭션이 실패했습니다:', {
+            txHash: tx.hash,
+            status: rc.status
+          });
+        }
+      }
+      
     } catch (e: any) {
-      this.logger.warn('[PAYMENT] 트랜잭션 채굴 대기 실패:', e?.message || e);
+      this.logger.error('[PAYMENT] 트랜잭션 채굴 대기 실패:', {
+        error: e?.message || e,
+        txHash: tx.hash,
+        networkChainId: process.env.CHAIN_ID
+      });
+      
+      // 트랜잭션 상태 수동 확인
+      try {
+        this.logger.log('[PAYMENT] 트랜잭션 상태 수동 확인 중...');
+        const receipt = await this.provider.getTransactionReceipt(tx.hash);
+        const transaction = await this.provider.getTransaction(tx.hash);
+        
+        if (receipt) {
+          this.logger.log('[PAYMENT] 트랜잭션 발견됨 (채굴 완료):', {
+            status: receipt.status,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed?.toString()
+          });
+        } else if (transaction) {
+          this.logger.log('[PAYMENT] 트랜잭션 발견됨 (채굴 대기 중):', {
+            hash: transaction.hash,
+            type: transaction.type,
+            nonce: transaction.nonce
+          });
+        } else {
+          this.logger.error('[PAYMENT] 트랜잭션을 찾을 수 없음. 네트워크나 트랜잭션 타입 문제일 수 있음:', {
+            txHash: tx.hash,
+            currentChainId: process.env.CHAIN_ID
+          });
+        }
+      } catch (checkError: any) {
+        this.logger.error('[PAYMENT] 트랜잭션 상태 확인도 실패:', {
+          error: checkError?.message || checkError,
+          code: checkError?.code
+        });
+      }
     }
 
     const result = { status: 'ok', txHash: tx.hash };
