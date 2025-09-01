@@ -191,4 +191,49 @@ export class AppController {
       throw error;
     }
   }
+
+  // EOA nonce 조회
+  @Post('api/eoa-nonce')
+  async getEOANonce(@Body() body: any) {
+    this.logger.debug('[POST /api/eoa-nonce] EOA nonce 조회 요청:', body);
+    try {
+      const { authority } = body;
+      const nonce = await this.appService.getEOANonce(authority);
+      this.logger.debug('[POST /api/eoa-nonce] EOA nonce 조회 성공:', { authority, nonce });
+      return { nonce };
+    } catch (error: any) {
+      this.logger.error('[POST /api/eoa-nonce] EOA nonce 조회 오류:', error.message);
+      throw error;
+    }
+  }
+
+  // Transfer 데이터 준비
+  @Post('api/prepare-transfer')
+  async prepareTransfer(@Body() body: any) {
+    this.logger.debug('[POST /api/prepare-transfer] Transfer 데이터 준비 요청:', body);
+    try {
+      const result = await this.appService.prepareTransferData(body);
+      this.logger.debug('[POST /api/prepare-transfer] Transfer 데이터 준비 성공:', result);
+      return result;
+    } catch (error: any) {
+      this.logger.error('[POST /api/prepare-transfer] Transfer 데이터 준비 오류:', error.message);
+      throw error;
+    }
+  }
+
+  // 서명된 결제 처리
+  @Post('payment-signed')
+  async paymentSigned(@Body() body: any) {
+    this.logger.log('[POST /payment-signed] 서명된 결제 요청 시작');
+    this.logger.debug('[POST /payment-signed] 요청 body:', body);
+    
+    try {
+      const result = await this.appService.processSignedPayment(body);
+      this.logger.log('[POST /payment-signed] 서명된 결제 성공:', result);
+      return result;
+    } catch (error: any) {
+      this.logger.error('[POST /payment-signed] 서명된 결제 오류:', error.message);
+      throw error;
+    }
+  }
 }

@@ -86,7 +86,7 @@ type Transfer = {
 
 type AuthItem = {
   chainId: number;
-  address: string;         // delegate(implementation) contract
+  address: string;         // delegate contract address (위임 대상)
   nonce: number;           // EOA tx nonce (not the contract nonce)
   signature: `0x${string}`; // 65B serialized sig
 };
@@ -122,7 +122,7 @@ async function readNextNonceViaAuthorizedView(
   return nextNonce;
 }
 
-// 필요 시 fresh authorization 생성
+// 필요 시 fresh authorization 생성 (EIP-7702 명세 준수)
 async function ensureAuthorization(
   signer: ethers.Wallet,
   provider: ethers.JsonRpcProvider
@@ -130,15 +130,18 @@ async function ensureAuthorization(
   const authority     = signer.address;
   const eoaNonceLatest = await provider.getTransactionCount(authority, 'latest');
 
+  // ethers.js authorize() 사용하되 결과를 EIP-7702 명세에 맞게 조정
   const auth = await signer.authorize({
     address: DELEGATE_ADDRESS,
     nonce:   eoaNonceLatest,
     chainId: CHAIN_ID,
   });
 
+  // EIP-7702 명세: authorization tuple = [chain_id, address, nonce, y_parity, r, s]
+  // 여기서 address는 delegation target이어야 함
   return {
     chainId: Number(auth.chainId),
-    address: auth.address,
+    address: DELEGATE_ADDRESS,   // 명시적으로 delegation target 설정
     nonce:   Number(auth.nonce),
     signature: (auth.signature as Signature).serialized as `0x${string}`,
   };

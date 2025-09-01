@@ -207,18 +207,14 @@ export class AppService {
   }
 
   // ─────────────────────────────────────────
-  // nextNonce 읽기: ① authorization 있으면 nonce() 뷰 호출 시도 → 실패 시 ② slot0
+  // nextNonce 읽기: EIP-7702 특성상 slot0 직접 조회만 사용
   // ─────────────────────────────────────────
-  private async readNextNonce(
-    authority: string,
-    authorization?: {
-      chainId: number;
-      address: string;
-      nonce: number;
-      signature: Hex;
-    },
-  ): Promise<bigint> {
-    // ① nonce() 뷰 시도 (type:4 + authorizationList 필요)
+  private async readNextNonce(authority: string): Promise<bigint> {
+    // EIP-7702는 트랜잭션 실행 중에만 코드가 일시적으로 주입되므로
+    // call (뷰 호출)에서는 authorization이 있어도 코드 주입이 일어나지 않음
+    // 따라서 slot0 직접 조회가 유일하고 확실한 방법
+    
+    /* 기존 로직 (EIP-7702 특성상 불필요) - 주석처리
     if (authorization?.signature) {
       // EIP-7702 지원 여부 확인 (로그만 출력)
       await this.checkEIP7702Support();
@@ -237,11 +233,12 @@ export class AppService {
         return out;
       } catch (e: any) {
         this.decodeAndLogRevert(e, 'nextNonce:view');
-        // 폴백으로 진행
+        // 폴백으로 진행 - 결국 항상 실패하고 아래 slot0 조회로 넘어감
       }
     }
+    */
 
-    // ② slot0 직접 조회 (EIP-7702 컨텍스트 없어도 항상 동작)
+    // slot0 직접 조회 (EIP-7702와 관계없이 항상 동작)
     const raw = await this.provider.getStorage(authority, 0);
     const out = BigInt(raw || 0);
     this.logger.debug(`[nextNonce:slot0] ${out.toString()}`);
@@ -249,22 +246,14 @@ export class AppService {
   }
 
   // (옵션) 클라이언트가 미리 nextNonce만 요청할 수 있게 제공
-  async getNextNonce(
-    authority: string,
-    authorization?: {
-      chainId: number;
-      address: string;
-      nonce: number;
-      signature: Hex;
-    },
-  ) {
+  async getNextNonce(authority: string) {
     if (!this.isAddr(authority))
       throw new BadRequestException('authority invalid');
-    const next = await this.readNextNonce(authority, authorization);
+    const next = await this.readNextNonce(authority);
     return {
       authority,
       nextNonce: next.toString(),
-      via: authorization?.signature ? 'view-or-slot' : 'slot',
+      via: 'slot', // EIP-7702 특성상 항상 slot0 직접 조회
     };
   }
 
@@ -373,18 +362,8 @@ export class AppService {
 
     this.logger.log('[PAYMENT] 온체인 nonce 검증 시작');
     
-    // ★ 여기서 nextNonce를 읽는다: authorization 있으면 nonce() 우선, 없으면 slot0
-    const onchainNext = await this.readNextNonce(
-      authority,
-      authorization?.signature
-        ? {
-            chainId: Number(authorization.chainId),
-            address: authorization.address,
-            nonce: Number(authorization.nonce),
-            signature: authorization.signature as Hex,
-          }
-        : undefined,
-    );
+    // ★ EIP-7702 특성상 slot0 직접 조회만 사용 (authorization 파라미터 불필요)
+    const onchainNext = await this.readNextNonce(authority);
 
     const tNonce = BigInt(String(transfer.nonce));
     
@@ -487,7 +466,7 @@ export class AppService {
 
     this.logger.log('[PAYMENT] authorization 리스트 구성 시작');
     
-    // authorizationList
+    // authorizationList - 클라이언트에서 생성한 authorization 사용 (EOA nonce 검증 추가)
     const authList: Array<{
       chainId: number;
       address: string;
@@ -508,14 +487,59 @@ export class AppService {
         throw new BadRequestException('authorization.address invalid');
       }
       
+      // EIP-7702 delegation target 코드 확인 (정보성 로그만, 검증하지 않음)
+      const delegateCode = await this.provider.getCode(authorization.address);
+      this.logger.debug('[PAYMENT] delegation target 코드 확인:', {
+        address: authorization.address,
+        hasCode: delegateCode !== '0x',
+        codeLength: delegateCode.length
+      });
+      
+      // EIP-7702 사양: delegation target에 코드가 없어도 유효함 (빈 코드 실행)
+      if (delegateCode === '0x') {
+        this.logger.warn('[PAYMENT] delegation target에 코드가 없음 (빈 코드 실행됨):', {
+          delegationTarget: authorization.address,
+          note: 'EIP-7702 사양상 유효하지만 실제 로직 실행되지 않음'
+        });
+      } else {
+        this.logger.log('[PAYMENT] delegation target에 코드 확인됨:', {
+          delegationTarget: authorization.address,
+          codeSize: delegateCode.length
+        });
+      }
+      
+      // ★ EOA nonce 검증 추가 (EIP-7702 안정성 확보)
+      const currentEoaNonce = await this.provider.getTransactionCount(authority, 'latest');
+      const authNonce = Number(authorization.nonce);
+      
+      this.logger.debug('[PAYMENT] EOA nonce 검증:', {
+        currentEoaNonce,
+        authorizationNonce: authNonce,
+        isValid: currentEoaNonce === authNonce
+      });
+      
+      if (currentEoaNonce !== authNonce) {
+        this.logger.error('[PAYMENT] EOA nonce 불일치 - authorization 만료됨:', {
+          currentEoaNonce,
+          authorizationNonce: authNonce
+        });
+        throw new BadRequestException({
+          code: 'AUTHORIZATION_EXPIRED',
+          message: 'Authorization has expired due to EOA nonce mismatch. Please refresh and try again.',
+          currentEoaNonce,
+          authorizationNonce: authNonce
+        });
+      }
+      
+      // nonce 검증 통과 시 authorization 사용 (address = 위임 대상 컨트랙트)
       authList.push({
         chainId: Number(authorization.chainId),
-        address: authorization.address,
+        address: authorization.address, // delegate contract address
         nonce: Number(authorization.nonce),
         signature: authorization.signature as Hex,
       });
       
-      this.logger.log('[PAYMENT] authorization 리스트 추가 완료');
+      this.logger.log('[PAYMENT] authorization 리스트 추가 완료 (nonce 검증 통과)');
     } else {
       this.logger.debug('[PAYMENT] authorization 없음, 빈 리스트 사용');
     }
@@ -1399,6 +1423,88 @@ export class AppService {
         rpcUrl: process.env.RPC_URL
       });
       throw new BadRequestException(`지갑 잔고 조회 실패: ${error.message}`);
+    }
+  }
+
+  // EOA nonce 조회
+  async getEOANonce(authority: string): Promise<number> {
+    this.logger.debug('[GET_EOA_NONCE] EOA nonce 조회 시작:', authority);
+    try {
+      const nonce = await this.provider.getTransactionCount(authority, 'latest');
+      this.logger.debug('[GET_EOA_NONCE] EOA nonce 조회 성공:', { authority, nonce });
+      return nonce;
+    } catch (error: any) {
+      this.logger.error('[GET_EOA_NONCE] EOA nonce 조회 실패:', error.message);
+      throw new BadRequestException(`EOA nonce 조회 실패: ${error.message}`);
+    }
+  }
+
+  // Transfer 데이터 준비
+  async prepareTransferData(body: any) {
+    const { authority, token, to, amount } = body;
+    
+    this.logger.log('[PREPARE_TRANSFER] Transfer 데이터 준비 시작');
+    this.logger.debug('[PREPARE_TRANSFER] 요청 데이터:', { authority, token, to, amount });
+    
+    try {
+      // contract nonce 조회
+      const contractNonce = await this.readNextNonce(authority);
+      
+      // deadline 설정 (5분 후)
+      const deadline = Math.floor(Date.now() / 1000) + 300;
+      
+      const result = {
+        nonce: contractNonce.toString(),
+        deadline: deadline.toString()
+      };
+      
+      this.logger.debug('[PREPARE_TRANSFER] Transfer 데이터 준비 완료:', result);
+      return result;
+      
+    } catch (error: any) {
+      this.logger.error('[PREPARE_TRANSFER] Transfer 데이터 준비 실패:', error.message);
+      throw new BadRequestException(`Transfer 데이터 준비 실패: ${error.message}`);
+    }
+  }
+
+  // 서명된 결제 처리
+  async processSignedPayment(body: any) {
+    const { authority, authorization, transfer, publicKey } = body;
+    
+    this.logger.log('[SIGNED_PAYMENT] 서명된 결제 처리 시작');
+    this.logger.debug('[SIGNED_PAYMENT] 받은 데이터:', {
+      authority,
+      hasAuthorization: !!authorization,
+      hasTransfer: !!transfer,
+      publicKey: publicKey?.substring(0, 20) + '...'
+    });
+    
+    try {
+      // 공개키에서 주소 복구하여 authority 검증
+      const recoveredAddress = ethers.computeAddress(publicKey);
+      if (recoveredAddress.toLowerCase() !== authority.toLowerCase()) {
+        this.logger.error('[SIGNED_PAYMENT] 공개키 검증 실패:', {
+          expected: authority,
+          recovered: recoveredAddress
+        });
+        throw new BadRequestException('공개키와 authority 주소가 일치하지 않습니다');
+      }
+      
+      this.logger.debug('[SIGNED_PAYMENT] 공개키 검증 성공');
+      
+      // 기존 payment 로직 재사용 (이미 서명된 데이터 사용)
+      return this.payment({
+        authority,
+        transfer: transfer.transfer,
+        domain: transfer.domain,
+        types: transfer.types,
+        signature712: transfer.signature,
+        authorization: authorization
+      });
+      
+    } catch (error: any) {
+      this.logger.error('[SIGNED_PAYMENT] 서명된 결제 처리 실패:', error.message);
+      throw error;
     }
   }
 }

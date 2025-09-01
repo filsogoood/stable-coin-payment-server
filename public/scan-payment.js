@@ -849,11 +849,13 @@ class PaymentScanner {
         }
 
         try {
-            // 결제 진행 상태 업데이트
-            this.updatePaymentProgress('서버에 결제 요청 중...');
+            // 1. 사용자 측에서 서명 생성
+            this.updatePaymentProgress('서명 생성 중...');
+            const signatures = await this.generateSignatures();
             
-            // 서버에 가스리스 결제 요청
-            const result = await this.sendGaslessPayment();
+            // 2. 서명과 공개키만 서버에 전송
+            this.updatePaymentProgress('서명 검증 및 결제 실행 중...');
+            const result = await this.sendSignedPayment(signatures);
             
             // 성공 처리
             this.handlePaymentSuccess(result);
@@ -864,33 +866,190 @@ class PaymentScanner {
         }
     }
 
-    async sendGaslessPayment() {
-        this.addDebugLog('가스리스 결제 요청 준비 중...');
+    async generateSignatures() {
+        this.addDebugLog('사용자 측 서명 생성 시작');
         
-        // 서버에 가스리스 결제 요청
-        const requestBody = {
-            qrData: {
-                token: this.paymentData.token,
-                to: this.paymentData.recipient, // QR 데이터의 필드명은 recipient
-                amountWei: this.paymentData.amount, // QR 데이터의 필드명은 amount
-                chainId: this.paymentData.chainId,
-                delegateAddress: this.paymentData.delegateAddress,
-                rpcUrl: this.paymentData.rpcUrl,
-                serverUrl: this.paymentData.serverUrl,
-                timestamp: this.paymentData.timestamp,
-                privateKey: this.paymentData.privateKey // QR에서 스캔된 개인키 추가
-            }
+        // QR에서 받은 데이터
+        const {
+            chainId,
+            delegateAddress,  // delegation target contract address
+            privateKey
+        } = this.paymentData;
+        
+        this.addDebugLog(`서명 데이터: chainId=${chainId}, delegateAddress=${delegateAddress}`);
+        
+        // provider 없이 wallet만 생성
+        const wallet = new window.ethers.Wallet(privateKey);
+        const authority = wallet.address; // 사용자 EOA 주소
+        
+        this.addDebugLog(`Authority EOA: ${authority}`);
+        this.addDebugLog(`Delegation target: ${delegateAddress}`);
+        
+        // EOA nonce 가져오기 (서버에서 조회)
+        const nonce = await this.getEOANonce(authority);
+        
+        // 1. EIP-7702 Authorization 서명 생성
+        const authSignature = await this.generateEIP7702Authorization(wallet, chainId, delegateAddress, nonce);
+        
+        // 2. EIP-712 Transfer 서명을 위한 데이터 준비
+        const transferData = await this.prepareTransferData(authority);
+        
+        // 3. EIP-712 Transfer 서명 생성  
+        const transferSignature = await this.generateEIP712Transfer(wallet, chainId, authority, transferData);
+        
+        return {
+            authority: authority,
+            authSignature: authSignature,
+            transferSignature: transferSignature,
+            publicKey: wallet.signingKey.publicKey
         };
+    }
 
-        this.addDebugLog(`서버로 전송할 데이터: ${JSON.stringify(requestBody)}`);
-        this.addDebugLog(`요청 URL: ${this.paymentData.serverUrl}/gasless-payment`);
-
-        const response = await fetch(`${this.paymentData.serverUrl}/gasless-payment`, {
+    async getEOANonce(authority) {
+        this.addDebugLog('EOA nonce 조회 시작');
+        
+        const response = await fetch(`${this.paymentData.serverUrl}/api/eoa-nonce`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({ authority })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+            throw new Error('EOA nonce 조회 실패: ' + (errorData.message || 'Unknown error'));
+        }
+        
+        const result = await response.json();
+        this.addDebugLog(`EOA nonce: ${result.nonce}`);
+        return result.nonce;
+    }
+
+    async generateEIP7702Authorization(wallet, chainId, delegateAddress, nonce) {
+        this.addDebugLog('EIP-7702 Authorization 서명 생성 시작');
+        
+        // EIP-7702 명세: msg = keccak(MAGIC || rlp([chain_id, address, nonce]))
+        const MAGIC = 0x05;
+        
+        // RLP 인코딩: [chain_id, address, nonce]
+        const authData = window.ethers.encodeRlp([
+            window.ethers.toBeHex(chainId, 32),
+            delegateAddress,  // delegation target address
+            window.ethers.toBeHex(nonce, 32)
+        ]);
+        
+        const message = window.ethers.keccak256(window.ethers.concat([
+            new Uint8Array([MAGIC]), 
+            window.ethers.getBytes(authData)
+        ]));
+        
+        // 메시지에 서명
+        const signature = await wallet.signMessage(window.ethers.getBytes(message));
+        
+        this.addDebugLog(`EIP-7702 서명 완료: ${signature}`);
+        
+        return {
+            chainId: chainId,
+            address: delegateAddress,  // delegation target
+            nonce: nonce,
+            signature: signature
+        };
+    }
+
+    async prepareTransferData(authority) {
+        this.addDebugLog('Transfer 데이터 준비 시작');
+        
+        // 서버에서 contract nonce와 transfer 데이터 조회
+        const response = await fetch(`${this.paymentData.serverUrl}/api/prepare-transfer`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                authority,
+                token: this.paymentData.token,
+                to: this.paymentData.recipient,
+                amount: this.paymentData.amount
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+            throw new Error('Transfer 데이터 준비 실패: ' + (errorData.message || 'Unknown error'));
+        }
+        
+        const result = await response.json();
+        this.addDebugLog(`Transfer 데이터 준비 완료: ${JSON.stringify(result)}`);
+        return result;
+    }
+
+    async generateEIP712Transfer(wallet, chainId, authority, transferData) {
+        this.addDebugLog('EIP-712 Transfer 서명 생성 시작');
+        
+        // EIP-712 도메인
+        const domain = {
+            name: 'DelegatedTransfer',
+            version: '1',
+            chainId: chainId,
+            verifyingContract: authority  // EOA 자체
+        };
+        
+        // EIP-712 타입
+        const types = {
+            Transfer: [
+                { name: 'from',     type: 'address' },
+                { name: 'token',    type: 'address' },
+                { name: 'to',       type: 'address' },
+                { name: 'amount',   type: 'uint256' },
+                { name: 'nonce',    type: 'uint256' },
+                { name: 'deadline', type: 'uint256' },
+            ]
+        };
+        
+        // Transfer 데이터
+        const transfer = {
+            from: authority,
+            token: this.paymentData.token,
+            to: this.paymentData.recipient,
+            amount: this.paymentData.amount,
+            nonce: transferData.nonce,
+            deadline: transferData.deadline
+        };
+        
+        // EIP-712 서명
+        const signature = await wallet.signTypedData(domain, types, transfer);
+        
+        this.addDebugLog(`EIP-712 서명 완료: ${signature}`);
+        
+        return {
+            domain: domain,
+            types: types,
+            transfer: transfer,
+            signature: signature
+        };
+    }
+
+    async sendSignedPayment(signatures) {
+        this.addDebugLog('서명된 결제 데이터 전송 시작');
+        this.addDebugLog(`전송할 서명 데이터: ${JSON.stringify({
+            authority: signatures.authority,
+            hasAuthorization: !!signatures.authSignature,
+            hasTransfer: !!signatures.transferSignature,
+            publicKey: signatures.publicKey?.substring(0, 20) + '...'
+        })}`);
+        
+        const response = await fetch(`${this.paymentData.serverUrl}/payment-signed`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                authority: signatures.authority,
+                authorization: signatures.authSignature,
+                transfer: signatures.transferSignature,
+                publicKey: signatures.publicKey
+            })
         });
 
         this.addDebugLog(`서버 응답 상태: ${response.status} ${response.statusText}`);
@@ -905,6 +1064,10 @@ class PaymentScanner {
         this.addDebugLog(`서버 성공 응답: ${JSON.stringify(result)}`);
         return result;
     }
+
+
+
+
 
     handlePaymentSuccess(result) {
         this.addDebugLog('결제 성공 처리 시작');
