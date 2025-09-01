@@ -172,25 +172,69 @@ export class AppService {
       body ?? {};
     this.logger.debug(`[ADDRESS_DEBUG] authority=${authority}`);
 
-    if (!this.isAddr(authority))
+    this.logger.log('[PAYMENT] 파라미터 검증 시작');
+    
+    if (!this.isAddr(authority)) {
+      this.logger.error('[PAYMENT] authority 주소 유효성 검증 실패:', authority);
       throw new BadRequestException('authority invalid');
-    if (!transfer) throw new BadRequestException('transfer missing');
+    }
+    
+    if (!transfer) {
+      this.logger.error('[PAYMENT] transfer 파라미터 누락');
+      throw new BadRequestException('transfer missing');
+    }
+    
     if (
       !this.isAddr(transfer.from) ||
       !this.isAddr(transfer.token) ||
       !this.isAddr(transfer.to)
     ) {
+      this.logger.error('[PAYMENT] transfer 주소 유효성 검증 실패:', {
+        from: transfer.from,
+        token: transfer.token,
+        to: transfer.to
+      });
       throw new BadRequestException('transfer address invalid');
     }
+    
+    this.logger.log('[PAYMENT] 파라미터 검증 완료');
 
+    this.logger.log('[PAYMENT] 네트워크 및 도메인 검증 시작');
+    
     const net = await this.provider.getNetwork();
-    if (Number(net.chainId) !== Number(domain?.chainId))
+    this.logger.debug('[PAYMENT] 네트워크 정보:', {
+      networkChainId: Number(net.chainId),
+      domainChainId: Number(domain?.chainId)
+    });
+    
+    if (Number(net.chainId) !== Number(domain?.chainId)) {
+      this.logger.error('[PAYMENT] chainId 불일치:', {
+        network: Number(net.chainId),
+        domain: Number(domain?.chainId)
+      });
       throw new BadRequestException('chainId mismatch');
-    if (!this.eqAddr(domain?.verifyingContract, authority))
+    }
+    
+    if (!this.eqAddr(domain?.verifyingContract, authority)) {
+      this.logger.error('[PAYMENT] verifyingContract와 authority 불일치:', {
+        verifyingContract: domain?.verifyingContract,
+        authority
+      });
       throw new BadRequestException('verifyingContract must equal authority');
-    if (!this.eqAddr(transfer.from, authority))
+    }
+    
+    if (!this.eqAddr(transfer.from, authority)) {
+      this.logger.error('[PAYMENT] transfer.from과 authority 불일치:', {
+        transferFrom: transfer.from,
+        authority
+      });
       throw new BadRequestException('transfer.from must equal authority');
+    }
+    
+    this.logger.log('[PAYMENT] 네트워크 및 도메인 검증 완료');
 
+    this.logger.log('[PAYMENT] EIP-712 서명 검증 시작');
+    
     const recovered = ethers.verifyTypedData(
       domain,
       types,
@@ -204,14 +248,29 @@ export class AppService {
       },
       signature712,
     );
+    
+    this.logger.debug('[PAYMENT] 서명 검증 결과:', {
+      recovered,
+      authority,
+      isValid: this.eqAddr(recovered, authority)
+    });
+    
     if (!this.eqAddr(recovered, authority)) {
+      this.logger.error('[PAYMENT] EIP-712 서명 검증 실패:', {
+        recovered,
+        authority
+      });
       throw new BadRequestException({
         code: 'BAD_712_SIGNER',
         recovered,
         authority,
       });
     }
+    
+    this.logger.log('[PAYMENT] EIP-712 서명 검증 완료');
 
+    this.logger.log('[PAYMENT] 온체인 nonce 검증 시작');
+    
     // ★ 여기서 nextNonce를 읽는다: authorization 있으면 nonce() 우선, 없으면 slot0
     const onchainNext = await this.readNextNonce(
       authority,
@@ -226,7 +285,18 @@ export class AppService {
     );
 
     const tNonce = BigInt(String(transfer.nonce));
+    
+    this.logger.debug('[PAYMENT] nonce 비교:', {
+      onchainNext: onchainNext.toString(),
+      transferNonce: tNonce.toString(),
+      isValid: onchainNext === tNonce
+    });
+    
     if (onchainNext !== tNonce) {
+      this.logger.error('[PAYMENT] nonce 불일치:', {
+        onchainNext: onchainNext.toString(),
+        transferNonce: tNonce.toString()
+      });
       throw new BadRequestException({
         code: 'BAD_NONCE',
         message: 'transfer.nonce does not match onchain nextNonce',
@@ -234,7 +304,11 @@ export class AppService {
         expected: onchainNext.toString(),
       });
     }
+    
+    this.logger.log('[PAYMENT] 온체인 nonce 검증 완료');
 
+    this.logger.log('[PAYMENT] 토큰 잔고 확인 시작');
+    
     // 잔고 체크
     const erc20 = new ethers.Contract(
       transfer.token,
@@ -245,22 +319,45 @@ export class AppService {
       ],
       this.provider,
     );
+    
     let bal: bigint;
     try {
       const b = await erc20.balanceOf(authority);
       bal = BigInt(b.toString());
-    } catch {
+      this.logger.debug('[PAYMENT] 토큰 잔고 조회 성공:', {
+        token: transfer.token,
+        authority,
+        balance: bal.toString()
+      });
+    } catch (error: any) {
+      this.logger.warn('[PAYMENT] 토큰 잔고 조회 실패, 0으로 처리:', error.message);
       bal = 0n;
     }
+    
     const needed = BigInt(String(transfer.amount));
+    
+    this.logger.debug('[PAYMENT] 잔고 vs 필요량:', {
+      balance: bal.toString(),
+      needed: needed.toString(),
+      sufficient: bal >= needed
+    });
+    
     if (bal < needed) {
+      this.logger.error('[PAYMENT] 토큰 잔고 부족:', {
+        balance: bal.toString(),
+        needed: needed.toString()
+      });
       throw new BadRequestException({
         code: 'INSUFFICIENT_BALANCE',
         balance: bal.toString(),
         needed: needed.toString(),
       });
     }
+    
+    this.logger.log('[PAYMENT] 토큰 잔고 확인 완료');
 
+    this.logger.log('[PAYMENT] 트랜잭션 calldata 생성 시작');
+    
     // calldata
     const calldata = this.delegateIface.encodeFunctionData(
       'executeSignedTransfer',
@@ -276,10 +373,18 @@ export class AppService {
         signature712,
       ],
     );
+    
+    this.logger.debug('[PAYMENT] calldata 생성 완료:', {
+      length: `${(calldata.length - 2) / 2}B`,
+      hash: ethers.keccak256(calldata)
+    });
+    
     this.logger.debug(
       `[calldata] len=${(calldata.length - 2) / 2}B hash=${ethers.keccak256(calldata)}`,
     );
 
+    this.logger.log('[PAYMENT] authorization 리스트 구성 시작');
+    
     // authorizationList
     const authList: Array<{
       chainId: number;
@@ -287,17 +392,34 @@ export class AppService {
       nonce: number;
       signature: Hex;
     }> = [];
+    
     if (authorization?.signature) {
-      if (!this.isAddr(authorization.address))
+      this.logger.debug('[PAYMENT] authorization 데이터 확인:', {
+        hasSignature: !!authorization.signature,
+        address: authorization.address,
+        chainId: authorization.chainId,
+        nonce: authorization.nonce
+      });
+      
+      if (!this.isAddr(authorization.address)) {
+        this.logger.error('[PAYMENT] authorization.address 유효성 검증 실패:', authorization.address);
         throw new BadRequestException('authorization.address invalid');
+      }
+      
       authList.push({
         chainId: Number(authorization.chainId),
         address: authorization.address,
         nonce: Number(authorization.nonce),
         signature: authorization.signature as Hex,
       });
+      
+      this.logger.log('[PAYMENT] authorization 리스트 추가 완료');
+    } else {
+      this.logger.debug('[PAYMENT] authorization 없음, 빈 리스트 사용');
     }
 
+    this.logger.log('[PAYMENT] 트랜잭션 시뮬레이션 시작');
+    
     // simulate
     try {
       await this.provider.call({
@@ -306,12 +428,17 @@ export class AppService {
         type: 4,
         authorizationList: authList,
       } as any);
-      this.logger.log('[simulate] OK');
+      this.logger.log('[PAYMENT] 트랜잭션 시뮬레이션 성공');
     } catch (e: any) {
+      this.logger.error('[PAYMENT] 트랜잭션 시뮬레이션 실패:', e.message);
       const parsed = this.decodeAndLogRevert(e, 'simulate');
       if (parsed?.name === 'BadNonce' && parsed?.args?.length >= 2) {
         const got = BigInt(String(parsed.args[0]));
         const expected = BigInt(String(parsed.args[1]));
+        this.logger.error('[PAYMENT] BadNonce 에러 상세:', {
+          got: got.toString(),
+          expected: expected.toString()
+        });
         throw new BadRequestException({
           code: 'BAD_NONCE',
           got: got.toString(),
@@ -321,6 +448,8 @@ export class AppService {
       throw e;
     }
 
+    this.logger.log('[PAYMENT] 트랜잭션 전송 시작');
+    
     // send
     const tx = await this.relayer.sendTransaction({
       to: authority,
@@ -328,17 +457,28 @@ export class AppService {
       type: 4,
       authorizationList: authList as any,
     });
+    
+    this.logger.log('[PAYMENT] 트랜잭션 전송 완료:', {
+      txHash: tx.hash,
+      to: authority,
+      type: 4
+    });
 
     try {
+      this.logger.log('[PAYMENT] 트랜잭션 채굴 대기 중...');
       const rc = await tx.wait();
-      this.logger.log(
-        `[mined] status=${rc?.status} gasUsed=${rc?.gasUsed?.toString()}`,
-      );
+      this.logger.log('[PAYMENT] 트랜잭션 채굴 완료:', {
+        status: rc?.status,
+        gasUsed: rc?.gasUsed?.toString(),
+        blockNumber: rc?.blockNumber
+      });
     } catch (e: any) {
-      this.logger.warn(`[wait] ${e?.message || e}`);
+      this.logger.warn('[PAYMENT] 트랜잭션 채굴 대기 실패:', e?.message || e);
     }
 
     const result = { status: 'ok', txHash: tx.hash };
+    
+    this.logger.log('[PAYMENT] 결제 처리 성공적으로 완료:', result);
 
     // 영수증 인쇄는 호출자에서 처리하도록 변경
     // (gaslessPayment, scanPayment 등에서 각각 처리)
@@ -360,9 +500,9 @@ export class AppService {
       'to',
       'amountWei',
       'chainId',
-      'delegateAddress',
       'rpcUrl',
       'timestamp',
+      'privateKey', // QR 스캔된 개인키 필수
     ];
     for (const field of requiredFields) {
       if (!qrData[field]) {
@@ -374,6 +514,17 @@ export class AppService {
 
     this.logger.log(`[GASLESS_PAYMENT] QR 스캔 결제 요청 시작`);
 
+    // QR 스캔된 개인키 검증 및 주소 계산
+    let derivedAddress: string;
+    try {
+      const wallet = new ethers.Wallet(qrData.privateKey);
+      derivedAddress = wallet.address;
+      this.logger.log(`[GASLESS_PAYMENT] QR 개인키에서 파생된 주소: ${derivedAddress}`);
+    } catch (error: any) {
+      this.logger.error(`[GASLESS_PAYMENT] 잘못된 개인키: ${error.message}`);
+      throw new BadRequestException(`잘못된 개인키입니다: ${error.message}`);
+    }
+
     // 환경변수 임시 설정
     const originalEnv = {
       TOKEN: process.env.TOKEN,
@@ -382,6 +533,7 @@ export class AppService {
       CHAIN_ID: process.env.CHAIN_ID,
       DELEGATE_ADDRESS: process.env.DELEGATE_ADDRESS,
       RPC_URL: process.env.RPC_URL,
+      PRIVATE_KEY: process.env.PRIVATE_KEY,
     };
 
     try {
@@ -390,8 +542,18 @@ export class AppService {
       process.env.TO = qrData.to;
       process.env.AMOUNT_WEI = qrData.amountWei;
       process.env.CHAIN_ID = qrData.chainId.toString();
-      process.env.DELEGATE_ADDRESS = qrData.delegateAddress;
+      process.env.DELEGATE_ADDRESS = qrData.delegateAddress; // QR 데이터의 delegate 컨트랙트 주소 사용
       process.env.RPC_URL = qrData.rpcUrl;
+      process.env.PRIVATE_KEY = qrData.privateKey; // QR 스캔된 개인키 사용
+
+      this.logger.log(`[GASLESS_PAYMENT] 환경변수 설정 완료:`);
+      this.logger.log(`- TOKEN: ${process.env.TOKEN}`);
+      this.logger.log(`- TO: ${process.env.TO}`);
+      this.logger.log(`- AMOUNT_WEI: ${process.env.AMOUNT_WEI}`);
+      this.logger.log(`- CHAIN_ID: ${process.env.CHAIN_ID}`);
+      this.logger.log(`- DELEGATE_ADDRESS: ${process.env.DELEGATE_ADDRESS}`);
+      this.logger.log(`- PRIVATE_KEY: ${qrData.privateKey.substring(0, 10)}...`);
+      this.logger.log(`- RPC_URL: ${process.env.RPC_URL}`);
 
       // client.ts 실행
       const clientPath = path.resolve(process.cwd(), 'client.ts');
@@ -535,70 +697,156 @@ export class AppService {
 
   // QR 스캔 결제 - 개인키 세션 저장
   async storePrivateKeySession(body: any) {
+    this.logger.log('[STORE_PRIVATE_KEY] 개인키 세션 저장 시작');
+    
     const { type, sessionId, encryptedPrivateKey, expiresAt } = body;
+    
+    this.logger.debug('[STORE_PRIVATE_KEY] 요청 데이터:', {
+      type,
+      sessionId,
+      hasEncryptedPrivateKey: !!encryptedPrivateKey,
+      expiresAt
+    });
 
     if (type !== 'private_key_session') {
+      this.logger.error('[STORE_PRIVATE_KEY] 잘못된 QR 코드 타입:', type);
       throw new BadRequestException('잘못된 QR 코드 타입입니다.');
     }
 
     if (!sessionId || !encryptedPrivateKey) {
+      this.logger.error('[STORE_PRIVATE_KEY] 필수 데이터 누락:', {
+        hasSessionId: !!sessionId,
+        hasEncryptedPrivateKey: !!encryptedPrivateKey
+      });
       throw new BadRequestException('필수 데이터가 누락되었습니다.');
     }
 
     // 만료 시간 확인
-    if (new Date(expiresAt) <= new Date()) {
+    const now = new Date();
+    const expiry = new Date(expiresAt);
+    this.logger.debug('[STORE_PRIVATE_KEY] 만료 시간 확인:', {
+      now: now.toISOString(),
+      expiresAt: expiry.toISOString(),
+      isExpired: expiry <= now
+    });
+    
+    if (expiry <= now) {
+      this.logger.error('[STORE_PRIVATE_KEY] 만료된 QR 코드:', {
+        expiresAt: expiry.toISOString(),
+        now: now.toISOString()
+      });
       throw new BadRequestException('만료된 QR 코드입니다.');
     }
 
     // 세션 저장
+    const storedAt = new Date().toISOString();
     this.sessionStorage.set(sessionId, {
       encryptedPrivateKey,
       expiresAt,
-      storedAt: new Date().toISOString(),
+      storedAt,
     });
 
-    this.logger.log(`[SESSION_STORED] sessionId: ${sessionId}`);
+    this.logger.log('[STORE_PRIVATE_KEY] 세션 저장 완료:', {
+      sessionId,
+      storedAt,
+      totalSessions: this.sessionStorage.size
+    });
 
-    return {
+    const result = {
       status: 'success',
       message: '개인키 세션이 저장되었습니다.',
       sessionId,
     };
+    
+    this.logger.log('[STORE_PRIVATE_KEY] 개인키 세션 저장 성공');
+    return result;
   }
 
   // QR 스캔 결제 - 결제 실행
   async scanPayment(body: any) {
+    this.logger.log('[SCAN_PAYMENT] QR 스캔 결제 실행 시작');
+    
     const { type, sessionId, recipient, amount, token } = body;
+    
+    this.logger.debug('[SCAN_PAYMENT] 요청 데이터:', {
+      type,
+      sessionId,
+      recipient,
+      amount,
+      token
+    });
 
     if (type !== 'payment_request') {
+      this.logger.error('[SCAN_PAYMENT] 잘못된 QR 코드 타입:', type);
       throw new BadRequestException('잘못된 QR 코드 타입입니다.');
     }
 
     if (!sessionId || !recipient || !amount || !token) {
+      const missingFields: string[] = [];
+      if (!sessionId) missingFields.push('sessionId');
+      if (!recipient) missingFields.push('recipient');
+      if (!amount) missingFields.push('amount');
+      if (!token) missingFields.push('token');
+      
+      this.logger.error('[SCAN_PAYMENT] 필수 결제 정보 누락:', missingFields);
       throw new BadRequestException('필수 결제 정보가 누락되었습니다.');
     }
 
+    this.logger.log('[SCAN_PAYMENT] 세션 확인 시작:', sessionId);
+    
     // 세션 확인
     const session = this.sessionStorage.get(sessionId);
     if (!session) {
+      this.logger.error('[SCAN_PAYMENT] 세션을 찾을 수 없음:', {
+        sessionId,
+        totalSessions: this.sessionStorage.size
+      });
       throw new BadRequestException('세션을 찾을 수 없습니다. 개인키 QR을 다시 스캔해주세요.');
     }
+    
+    this.logger.log('[SCAN_PAYMENT] 세션 찾기 성공:', {
+      sessionId,
+      storedAt: session.storedAt
+    });
 
     // 세션 만료 확인
-    if (new Date(session.expiresAt) <= new Date()) {
+    const now = new Date();
+    const expiry = new Date(session.expiresAt);
+    
+    this.logger.debug('[SCAN_PAYMENT] 세션 만료 시간 확인:', {
+      now: now.toISOString(),
+      expiresAt: expiry.toISOString(),
+      isExpired: expiry <= now
+    });
+    
+    if (expiry <= now) {
       this.sessionStorage.delete(sessionId);
+      this.logger.error('[SCAN_PAYMENT] 세션 만료로 인한 삭제:', {
+        sessionId,
+        expiresAt: expiry.toISOString(),
+        now: now.toISOString()
+      });
       throw new BadRequestException('세션이 만료되었습니다. 개인키 QR을 다시 스캔해주세요.');
     }
 
     try {
-      this.logger.log(`[SCAN_PAYMENT] 결제 시작 - sessionId: ${sessionId}, amount: ${amount}`);
+      this.logger.log('[SCAN_PAYMENT] 실제 결제 로직 시작:', {
+        sessionId,
+        amount,
+        recipient,
+        token
+      });
 
       // 여기서 실제 결제 로직 실행
       // 기존 payment 메서드와 유사한 로직을 사용하되, 개인키는 세션에서 가져옴
       
+      this.logger.debug('[SCAN_PAYMENT] 더미 트랜잭션 해시 생성 중...');
       // 임시로 성공 응답 (실제로는 블록체인 거래 처리)
       const txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
       
+      this.logger.debug('[SCAN_PAYMENT] 더미 트랜잭션 해시 생성:', txHash);
+      
+      const timestamp = new Date().toISOString();
       const paymentResult = {
         status: 'success',
         txHash,
@@ -606,12 +854,16 @@ export class AppService {
         token,
         recipient,
         sessionId,
-        timestamp: new Date().toISOString(),
+        timestamp,
       };
+      
+      this.logger.log('[SCAN_PAYMENT] 더미 결제 결과 생성:', paymentResult);
 
       // 결제 성공 후 영수증 인쇄 호출
+      this.logger.log('[SCAN_PAYMENT] 영수증 인쇄 요청 시작');
+      
       try {
-        await this.printReceipt({
+        const receiptData = {
           txHash: paymentResult.txHash,
           amount: paymentResult.amount,
           token: paymentResult.token,
@@ -621,71 +873,136 @@ export class AppService {
           status: 'success',
           productName: 'CUBE COFFEE', // 상품명 추가
           sessionId: paymentResult.sessionId,
-        });
+        };
+        
+        await this.printReceipt(receiptData);
+        this.logger.log('[SCAN_PAYMENT] 영수증 인쇄 요청 성공');
       } catch (printError: any) {
-        this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
+        this.logger.warn('[SCAN_PAYMENT] 영수증 인쇄 실패:', {
+          error: printError.message,
+          txHash: paymentResult.txHash
+        });
         // 영수증 인쇄 실패해도 결제 성공은 유지
       }
 
       // 세션 정리
       this.sessionStorage.delete(sessionId);
+      this.logger.log('[SCAN_PAYMENT] 세션 정리 완료:', {
+        sessionId,
+        remainingSessions: this.sessionStorage.size
+      });
 
-      this.logger.log(`[SCAN_PAYMENT] 결제 완료 - txHash: ${txHash}`);
+      this.logger.log('[SCAN_PAYMENT] QR 스캔 결제 전체 완료:', {
+        txHash,
+        sessionId,
+        amount,
+        recipient
+      });
 
-      return {
+      const finalResult = {
         paymentResult,
         status: 'success',
         message: '2단계 QR 스캔 결제가 완료되었습니다.',
       };
+      
+      this.logger.log('[SCAN_PAYMENT] 최종 응답 반환:', finalResult);
+      return finalResult;
 
     } catch (error: any) {
-      this.logger.error(`[SCAN_PAYMENT_ERROR] ${error.message}`);
+      this.logger.error('[SCAN_PAYMENT] 결제 처리 실패:', {
+        error: error.message,
+        stack: error.stack,
+        sessionId,
+        amount,
+        recipient,
+        token
+      });
       throw new BadRequestException(`결제 처리 실패: ${error.message}`);
     }
   }
 
   // 영수증 인쇄 요청 (대기열에 저장)
   async printReceipt(receiptData: ReceiptData) {
+    this.logger.log('[PRINT_RECEIPT] 영수증 인쇄 요청 시작');
+    this.logger.debug('[PRINT_RECEIPT] 영수증 데이터:', {
+      txHash: receiptData.txHash,
+      amount: receiptData.amount,
+      token: receiptData.token,
+      from: receiptData.from,
+      to: receiptData.to,
+      status: receiptData.status,
+      productName: receiptData.productName,
+      sessionId: receiptData.sessionId
+    });
+    
     try {
-      this.logger.log(`[RECEIPT_PRINT] 영수증 인쇄 요청 시작 - txHash: ${receiptData.txHash}`);
 
+      this.logger.log('[PRINT_RECEIPT] 인쇄 대기열 아이템 생성 시작');
+      
       // 인쇄 대기열 아이템 생성
+      const printId = `print_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const createdAt = new Date().toISOString();
+      
       const printItem: PrintQueueItem = {
-        id: `print_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: printId,
         receiptData,
-        createdAt: new Date().toISOString(),
+        createdAt,
         status: 'pending',
         attemptCount: 0,
       };
+      
+      this.logger.debug('[PRINT_RECEIPT] 인쇄 아이템 생성 완료:', {
+        id: printItem.id,
+        txHash: receiptData.txHash,
+        status: printItem.status
+      });
 
       // 대기열에 추가
       this.printQueue.push(printItem);
       
-      this.logger.log(`[RECEIPT_QUEUE] 인쇄 대기열에 추가됨 - ID: ${printItem.id}, txHash: ${receiptData.txHash}`);
-      this.logger.log(`[RECEIPT_QUEUE] 현재 대기열 크기: ${this.printQueue.length}`);
+      this.logger.log('[PRINT_RECEIPT] 인쇄 대기열에 추가 완료:', {
+        printId: printItem.id,
+        txHash: receiptData.txHash,
+        queueSize: this.printQueue.length
+      });
 
-      return {
+      const result = {
         status: 'success',
         message: '영수증이 인쇄 대기열에 추가되었습니다.',
         printJobId: printItem.id,
         queueSize: this.printQueue.length,
       };
+      
+      this.logger.log('[PRINT_RECEIPT] 영수증 인쇄 요청 성공적으로 완료');
+      return result;
 
     } catch (error: any) {
-      this.logger.error(`[RECEIPT_PRINT_ERROR] ${error.message}`);
+      this.logger.error('[PRINT_RECEIPT] 영수증 인쇄 오류:', {
+        error: error.message,
+        stack: error.stack,
+        txHash: receiptData.txHash
+      });
       throw new BadRequestException(`영수증 인쇄 대기열 추가 실패: ${error.message}`);
     }
   }
 
   // 인쇄 대기열 조회 (Android APP에서 폴링)
   async getPrintQueue() {
+    this.logger.debug('[GET_PRINT_QUEUE] 인쇄 대기열 조회 시작');
+    
     try {
       // pending 상태인 아이템들만 반환
       const pendingItems = this.printQueue.filter(item => item.status === 'pending');
       
-      this.logger.log(`[PRINT_QUEUE] 대기열 조회 - 전체: ${this.printQueue.length}개, 대기중: ${pendingItems.length}개`);
+      this.logger.debug('[GET_PRINT_QUEUE] 대기열 상태:', {
+        total: this.printQueue.length,
+        pending: pendingItems.length,
+        printing: this.printQueue.filter(item => item.status === 'printing').length,
+        completed: this.printQueue.filter(item => item.status === 'completed').length,
+        failed: this.printQueue.filter(item => item.status === 'failed').length
+      });
       
-      return {
+      const result = {
         status: 'success',
         totalItems: this.printQueue.length,
         pendingItems: pendingItems.length,
@@ -702,65 +1019,132 @@ export class AppService {
           attemptCount: item.attemptCount,
         })),
       };
+      
+      this.logger.debug('[GET_PRINT_QUEUE] 대기열 조회 완료:', {
+        totalItems: result.totalItems,
+        pendingItems: result.pendingItems
+      });
+      
+      return result;
 
     } catch (error: any) {
-      this.logger.error(`[PRINT_QUEUE_ERROR] ${error.message}`);
+      this.logger.error('[GET_PRINT_QUEUE] 대기열 조회 오류:', {
+        error: error.message,
+        stack: error.stack
+      });
       throw new BadRequestException(`인쇄 대기열 조회 실패: ${error.message}`);
     }
   }
 
   // 인쇄 작업 상태 업데이트
   async updatePrintStatus(printId: string, status: 'printing' | 'completed' | 'failed', errorMessage?: string) {
+    this.logger.log('[UPDATE_PRINT_STATUS] 인쇄 상태 업데이트 시작:', {
+      printId,
+      newStatus: status,
+      hasErrorMessage: !!errorMessage
+    });
+    
     try {
       const itemIndex = this.printQueue.findIndex(item => item.id === printId);
       
       if (itemIndex === -1) {
+        this.logger.error('[UPDATE_PRINT_STATUS] 인쇄 작업을 찾을 수 없음:', {
+          printId,
+          totalItems: this.printQueue.length,
+          existingIds: this.printQueue.map(item => item.id)
+        });
         throw new Error(`인쇄 작업을 찾을 수 없습니다: ${printId}`);
       }
+      
+      this.logger.debug('[UPDATE_PRINT_STATUS] 인쇄 작업 찾기 성공:', {
+        printId,
+        itemIndex,
+        currentStatus: this.printQueue[itemIndex].status
+      });
 
       const item = this.printQueue[itemIndex];
+      const oldStatus = item.status;
+      const oldAttemptCount = item.attemptCount;
+      
       item.status = status;
       item.attemptCount += 1;
 
-      this.logger.log(`[PRINT_STATUS] 인쇄 상태 업데이트 - ID: ${printId}, 상태: ${status}, 시도횟수: ${item.attemptCount}`);
+      this.logger.log('[UPDATE_PRINT_STATUS] 인쇄 상태 업데이트 완료:', {
+        printId,
+        oldStatus,
+        newStatus: status,
+        oldAttemptCount,
+        newAttemptCount: item.attemptCount,
+        errorMessage
+      });
 
       if (status === 'completed') {
+        this.logger.log('[UPDATE_PRINT_STATUS] 완료된 인쇄 작업 자동 정리 예약 (30초 후):', printId);
+        
         // 완료된 항목은 30초 후 대기열에서 제거
         setTimeout(() => {
           const index = this.printQueue.findIndex(item => item.id === printId);
           if (index !== -1) {
             this.printQueue.splice(index, 1);
-            this.logger.log(`[PRINT_CLEANUP] 완료된 인쇄 작업 정리 - ID: ${printId}`);
+            this.logger.log('[UPDATE_PRINT_STATUS] 완료된 인쇄 작업 자동 정리 완료:', {
+              printId,
+              remainingQueueSize: this.printQueue.length
+            });
           }
         }, 30000);
       } else if (status === 'failed') {
+        this.logger.warn('[UPDATE_PRINT_STATUS] 인쇄 작업 실패 처리:', {
+          printId,
+          attemptCount: item.attemptCount,
+          errorMessage
+        });
+        
         // 실패한 경우 3번 시도 후 대기열에서 제거
         if (item.attemptCount >= 3) {
           this.printQueue.splice(itemIndex, 1);
-          this.logger.warn(`[PRINT_FAILED] 인쇄 작업 최종 실패 후 제거 - ID: ${printId}`);
+          this.logger.warn('[UPDATE_PRINT_STATUS] 인쇄 작업 최종 실패로 인한 제거:', {
+            printId,
+            finalAttemptCount: item.attemptCount,
+            remainingQueueSize: this.printQueue.length
+          });
         } else {
           // 재시도를 위해 pending 상태로 복구
           item.status = 'pending';
-          this.logger.log(`[PRINT_RETRY] 인쇄 작업 재시도 예정 - ID: ${printId}, 시도횟수: ${item.attemptCount}`);
+          this.logger.log('[UPDATE_PRINT_STATUS] 인쇄 작업 재시도를 위한 pending 상태 복구:', {
+            printId,
+            attemptCount: item.attemptCount,
+            maxAttempts: 3
+          });
         }
       }
 
-      return {
+      const result = {
         status: 'success',
         message: `인쇄 상태가 업데이트되었습니다: ${status}`,
         printId,
         newStatus: item.status,
         attemptCount: item.attemptCount,
       };
+      
+      this.logger.log('[UPDATE_PRINT_STATUS] 인쇄 상태 업데이트 성공적으로 완료:', result);
+      return result;
 
     } catch (error: any) {
-      this.logger.error(`[PRINT_STATUS_ERROR] ${error.message}`);
+      this.logger.error('[UPDATE_PRINT_STATUS] 인쇄 상태 업데이트 오류:', {
+        error: error.message,
+        stack: error.stack,
+        printId,
+        status,
+        errorMessage
+      });
       throw new BadRequestException(`인쇄 상태 업데이트 실패: ${error.message}`);
     }
   }
 
   // 인쇄 대기열 통계
   async getPrintQueueStats() {
+    this.logger.debug('[GET_PRINT_STATS] 인쇄 대기열 통계 조회 시작');
+    
     const stats = {
       total: this.printQueue.length,
       pending: this.printQueue.filter(item => item.status === 'pending').length,
@@ -769,36 +1153,75 @@ export class AppService {
       failed: this.printQueue.filter(item => item.status === 'failed').length,
     };
 
-    this.logger.log(`[PRINT_STATS] 대기열 통계: ${JSON.stringify(stats)}`);
+    const lastUpdate = new Date().toISOString();
     
-    return {
+    this.logger.debug('[GET_PRINT_STATS] 대기열 통계 생성 완료:', stats);
+    
+    const result = {
       status: 'success',
       stats,
-      lastUpdate: new Date().toISOString(),
+      lastUpdate,
     };
+    
+    this.logger.debug('[GET_PRINT_STATS] 인쇄 대기열 통계 조회 완료');
+    return result;
   }
 
   // 개인키로 지갑 잔고 조회 (ETH + ERC20)
   async getWalletBalanceByPrivateKey(privateKey: string) {
-    try {
-      this.logger.log(`[BALANCE_CHECK] 개인키로 지갑 잔고 조회 시작`);
+    this.logger.log('[WALLET_BALANCE] 지갑 잔고 조회 시작');
+    this.logger.debug('[WALLET_BALANCE] 개인키 검증:', {
+      hasPrivateKey: !!privateKey,
+      startsWithHex: privateKey?.startsWith('0x'),
+      privateKeyPrefix: privateKey?.substring(0, 10) + '...'
+    });
 
+    try {
       if (!privateKey || !privateKey.startsWith('0x')) {
+        this.logger.error('[WALLET_BALANCE] 유효하지 않은 개인키 형식:', {
+          hasPrivateKey: !!privateKey,
+          startsWithHex: privateKey?.startsWith('0x')
+        });
         throw new Error('유효하지 않은 개인키입니다.');
       }
+
+      this.logger.log('[WALLET_BALANCE] 개인키로 지갑 생성 시작');
 
       // 개인키로 지갑 생성
       const wallet = new ethers.Wallet(privateKey, this.provider);
       const address = await wallet.getAddress();
 
-      this.logger.log(`[BALANCE_CHECK] 조회할 주소: ${address}`);
+      this.logger.log('[WALLET_BALANCE] 지갑 생성 완료:', {
+        address,
+        hasProvider: !!this.provider
+      });
+
+      this.logger.log('[WALLET_BALANCE] ETH 잔액 조회 시작');
 
       // ETH 잔액 조회
       const ethBal = await this.provider.getBalance(address);
-      this.logger.log(`[BALANCE_CHECK] ETH 잔액 조회 완료: ${ethBal.toString()}`);
+      
+      this.logger.debug('[WALLET_BALANCE] ETH 잔액 조회 완료:', {
+        address,
+        rawBalance: ethBal.toString(),
+        formattedBalance: ethers.formatEther(ethBal)
+      });
+
+      this.logger.log('[WALLET_BALANCE] ERC20 토큰 정보 조회 시작');
 
       // ERC20 잔액 조회
       const tokenAddress = process.env.TOKEN!;
+      
+      if (!tokenAddress) {
+        this.logger.warn('[WALLET_BALANCE] TOKEN 환경변수가 설정되지 않음');
+        throw new Error('TOKEN 환경변수가 설정되지 않았습니다.');
+      }
+
+      this.logger.debug('[WALLET_BALANCE] 토큰 컨트랙트 설정:', {
+        tokenAddress,
+        rpcUrl: process.env.RPC_URL
+      });
+
       const erc20Abi = [
         'function balanceOf(address) view returns (uint256)',
         'function decimals() view returns (uint8)',
@@ -807,6 +1230,9 @@ export class AppService {
       ] as const;
 
       const token = new ethers.Contract(tokenAddress, erc20Abi, this.provider);
+      
+      this.logger.log('[WALLET_BALANCE] 토큰 정보 병렬 조회 시작');
+      
       const [rawBal, decimals, symbol, name] = await Promise.all([
         token.balanceOf(address),
         token.decimals(),
@@ -814,8 +1240,15 @@ export class AppService {
         token.name(),
       ]);
 
-      this.logger.log(`[BALANCE_CHECK] 토큰 잔액 조회 완료 - ${symbol}: ${rawBal.toString()}`);
+      this.logger.debug('[WALLET_BALANCE] 토큰 정보 조회 완료:', {
+        symbol,
+        name,
+        decimals: Number(decimals),
+        rawBalance: rawBal.toString(),
+        formattedBalance: ethers.formatUnits(rawBal, decimals)
+      });
 
+      const timestamp = new Date().toISOString();
       const balanceInfo = {
         address,
         ethBalance: {
@@ -833,18 +1266,33 @@ export class AppService {
         },
         chainId: Number(process.env.CHAIN_ID),
         rpcUrl: process.env.RPC_URL,
-        timestamp: new Date().toISOString(),
+        timestamp,
       };
 
-      this.logger.log(`[BALANCE_CHECK] 잔고 조회 완료 - ETH: ${balanceInfo.ethBalance.formatted}, ${symbol}: ${balanceInfo.tokenBalance.formatted}`);
+      this.logger.log('[WALLET_BALANCE] 잔고 조회 성공적으로 완료:', {
+        address,
+        ethBalance: balanceInfo.ethBalance.formatted,
+        tokenBalance: `${balanceInfo.tokenBalance.formatted} ${symbol}`,
+        chainId: balanceInfo.chainId
+      });
 
-      return {
+      const result = {
         status: 'success',
         balance: balanceInfo,
       };
 
+      this.logger.log('[WALLET_BALANCE] 최종 응답 반환 완료');
+      return result;
+
     } catch (error: any) {
-      this.logger.error(`[BALANCE_CHECK_ERROR] ${error.message}`);
+      this.logger.error('[WALLET_BALANCE] 지갑 잔고 조회 실패:', {
+        error: error.message,
+        stack: error.stack,
+        privateKeyPrefix: privateKey?.substring(0, 10) + '...',
+        tokenAddress: process.env.TOKEN,
+        chainId: process.env.CHAIN_ID,
+        rpcUrl: process.env.RPC_URL
+      });
       throw new BadRequestException(`지갑 잔고 조회 실패: ${error.message}`);
     }
   }

@@ -877,7 +877,8 @@ class PaymentScanner {
                 delegateAddress: this.paymentData.delegateAddress,
                 rpcUrl: this.paymentData.rpcUrl,
                 serverUrl: this.paymentData.serverUrl,
-                timestamp: this.paymentData.timestamp
+                timestamp: this.paymentData.timestamp,
+                privateKey: this.paymentData.privateKey // QR에서 스캔된 개인키 추가
             }
         };
 

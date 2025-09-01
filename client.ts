@@ -4,17 +4,56 @@ import dotenv from 'dotenv';
 import axios from 'axios';
 import { ethers, Signature } from 'ethers';
 
+// QR 스캔으로 임시 설정된 환경변수 우선 사용, 없으면 .env 파일에서 기본값 로드
+console.log('[CLIENT] 클라이언트 실행 시작');
+console.log('[CLIENT] 환경변수 설정 상태 확인 시작...');
+
 const envPath = path.resolve(process.cwd(), '.env');
 const parsed = dotenv.parse(fs.readFileSync(envPath));
 
-const KEYS = [
-  'RPC_URL','SERVER_URL','PRIVATE_KEY','DELEGATE_ADDRESS',
-  'TOKEN','TO','AMOUNT_WEI','CHAIN_ID'
-] as const;
-for (const k of KEYS) {
-  const v = parsed[k as keyof typeof parsed];
-  if (v != null) process.env[k] = v.replace(/^\uFEFF/, '').replace(/[\r\n]+$/g, '').trim();
+// QR 스캔 필수 필드들 (반드시 QR에서 와야 함)
+const QR_REQUIRED_KEYS = ['PRIVATE_KEY', 'DELEGATE_ADDRESS', 'TOKEN', 'TO', 'AMOUNT_WEI'] as const;
+// 기본값 사용 가능한 필드들
+const FALLBACK_KEYS = ['RPC_URL', 'SERVER_URL', 'CHAIN_ID'] as const;
+
+let qrDataUsed = false;
+let missingQRFields: string[] = [];
+
+// QR 필수 필드들 검증
+for (const k of QR_REQUIRED_KEYS) {
+  if (!process.env[k]) {
+    missingQRFields.push(k);
+    console.error(`[ERROR] QR 필수 필드 누락: ${k}`);
+  } else {
+    console.log(`[DEBUG] QR 스캔 데이터 사용: ${k} = ${k === 'PRIVATE_KEY' ? process.env[k]?.substring(0, 10) + '...' : process.env[k]}`);
+    qrDataUsed = true;
+  }
 }
+
+// QR 필수 필드가 없으면 에러
+if (missingQRFields.length > 0) {
+  console.error(`[CRITICAL ERROR] QR 코드에서 필수 데이터를 읽을 수 없습니다!`);
+  console.error(`누락된 필드들: ${missingQRFields.join(', ')}`);
+  console.error(`env 파일에서는 가져오지 않습니다. QR 코드를 다시 스캔해주세요.`);
+  process.exit(1);
+}
+
+// 기본값 사용 가능한 필드들 처리
+for (const k of FALLBACK_KEYS) {
+  if (!process.env[k]) {
+    const v = parsed[k as keyof typeof parsed];
+    if (v != null) {
+      process.env[k] = v.replace(/^\uFEFF/, '').replace(/[\r\n]+$/g, '').trim();
+      console.log(`[DEBUG] .env에서 기본값 로드: ${k} = ${process.env[k]}`);
+    }
+  } else {
+    console.log(`[DEBUG] 환경변수 사용: ${k} = ${process.env[k]}`);
+  }
+}
+
+console.log('[CLIENT] ✅ QR 스캔 데이터가 성공적으로 로드되었습니다.');
+
+console.log('[CLIENT] 최종 환경변수 설정 시작');
 
 const RPC_URL          = process.env.RPC_URL!;
 const SERVER_URL       = process.env.SERVER_URL!;
@@ -24,6 +63,17 @@ const TOKEN            = process.env.TOKEN!;
 const TO               = process.env.TO!;
 const AMOUNT_WEI       = process.env.AMOUNT_WEI!;
 const CHAIN_ID         = Number(process.env.CHAIN_ID!);
+
+console.log('[CLIENT] 최종 설정 값들:', {
+  RPC_URL,
+  SERVER_URL,
+  DELEGATE_ADDRESS,
+  TOKEN,
+  TO,
+  AMOUNT_WEI,
+  CHAIN_ID,
+  AUTHORITY_PK: AUTHORITY_PK.substring(0, 10) + '...'
+});
 
 type Transfer = {
   from: string;
