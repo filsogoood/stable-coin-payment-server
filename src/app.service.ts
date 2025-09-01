@@ -38,6 +38,9 @@ export class AppService {
   
   // QR 스캔 세션 저장소 (실제 운영에서는 Redis 등 사용 권장)
   private sessionStorage = new Map<string, any>();
+  
+  // EIP-7702 지원 여부 캐시
+  private eip7702SupportCache: boolean | null = null;
 
   private provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
   private relayer = new ethers.Wallet(process.env.SPONSOR_PK!, this.provider);
@@ -107,6 +110,102 @@ export class AppService {
     return null;
   }
 
+  /**
+   * EIP-7702 지원 여부를 확인 (캐싱 적용)
+   */
+  private async checkEIP7702Support(): Promise<boolean> {
+    // 캐시된 결과가 있다면 로그만 출력하고 반환
+    if (this.eip7702SupportCache !== null) {
+      if (this.eip7702SupportCache) {
+        this.logger.log('[EIP7702_CHECK] ✅ EIP-7702가 지원됩니다 (캐시됨)');
+      } else {
+        this.logger.warn('[EIP7702_CHECK] ❌ EIP-7702가 지원되지 않습니다 (캐시됨)');
+      }
+      return this.eip7702SupportCache;
+    }
+
+    try {
+      this.logger.log('[EIP7702_CHECK] EIP-7702 지원 여부 확인 시작');
+      
+      const network = await this.provider.getNetwork();
+      const chainId = Number(network?.chainId || 97);
+      
+      // 알려진 EIP-7702 미지원 네트워크 확인
+      const unsupportedChainIds = [
+        56,     // BSC Mainnet
+        97,     // BSC Testnet
+        137,    // Polygon Mainnet
+        80001,  // Polygon Mumbai (deprecated)
+        80002,  // Polygon Amoy
+        43114,  // Avalanche C-Chain
+        43113,  // Avalanche Fuji Testnet
+        250,    // Fantom Opera
+        4002,   // Fantom Testnet
+        25,     // Cronos Mainnet
+        338,    // Cronos Testnet
+        1284,   // Moonbeam
+        1287,   // Moonriver
+        42161,  // Arbitrum One
+        421613, // Arbitrum Goerli (deprecated)
+        421614, // Arbitrum Sepolia
+        10,     // Optimism
+        420,    // Optimism Goerli (deprecated)
+        11155420, // Optimism Sepolia
+      ];
+      
+      if (unsupportedChainIds.includes(chainId)) {
+        this.logger.warn(`[EIP7702_CHECK] ❌ EIP-7702가 지원되지 않습니다 (Chain ID ${chainId}는 알려진 미지원 네트워크)`);
+        this.eip7702SupportCache = false;
+        return false;
+      }
+      
+      // 간단한 EIP-7702 트랜잭션으로 테스트
+      const testAuth = {
+        chainId: chainId,
+        address: '0x0000000000000000000000000000000000000001', // 테스트용 주소
+        nonce: 0,
+        signature: '0x' + '00'.repeat(65), // 테스트용 시그니처
+      };
+
+      await this.provider.call({
+        to: '0x0000000000000000000000000000000000000001',
+        data: '0x',
+        type: 4,
+        authorizationList: [testAuth],
+      } as any);
+
+      this.logger.log('[EIP7702_CHECK] ✅ EIP-7702가 지원됩니다');
+      this.eip7702SupportCache = true;
+      return true;
+      
+    } catch (e: any) {
+      this.logger.log('[EIP7702_CHECK] EIP-7702 테스트 실패:', e.message);
+      
+      // EIP-7702 미지원을 나타내는 에러 메시지들
+      const errorMessage = e.message?.toLowerCase() || '';
+      const errorInfo = e.info?.error?.message?.toLowerCase() || '';
+      
+      if (
+        errorMessage.includes('invalid opcode') || 
+        errorMessage.includes('opcode 0xef') ||
+        errorMessage.includes('unknown transaction type') ||
+        errorMessage.includes('transaction type not supported') ||
+        errorMessage.includes('transaction type 4') ||
+        errorInfo.includes('invalid opcode') ||
+        errorInfo.includes('opcode 0xef')
+      ) {
+        this.logger.warn('[EIP7702_CHECK] ❌ EIP-7702가 지원되지 않습니다 (네트워크 미지원)');
+        this.eip7702SupportCache = false;
+        return false;
+      }
+      
+      // 다른 에러도 EIP-7702 미지원으로 간주 (보수적 접근)
+      this.logger.warn('[EIP7702_CHECK] ❌ EIP-7702가 지원되지 않습니다 (테스트 실패)');
+      this.eip7702SupportCache = false;
+      return false;
+    }
+  }
+
   // ─────────────────────────────────────────
   // nextNonce 읽기: ① authorization 있으면 nonce() 뷰 호출 시도 → 실패 시 ② slot0
   // ─────────────────────────────────────────
@@ -121,6 +220,9 @@ export class AppService {
   ): Promise<bigint> {
     // ① nonce() 뷰 시도 (type:4 + authorizationList 필요)
     if (authorization?.signature) {
+      // EIP-7702 지원 여부 확인 (로그만 출력)
+      await this.checkEIP7702Support();
+      
       try {
         const data = this.delegateIface.encodeFunctionData('nonce', []);
         const ret = await this.provider.call({
@@ -419,6 +521,9 @@ export class AppService {
     }
 
     this.logger.log('[PAYMENT] 트랜잭션 시뮬레이션 시작');
+    
+    // EIP-7702 지원 여부 확인 (로그만 출력)
+    await this.checkEIP7702Support();
     
     // simulate
     try {
