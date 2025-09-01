@@ -18,7 +18,7 @@
                         <div class="scanner-overlay"></div>
                         <div class="scan-guide">
                             <div class="scan-frame"></div>
-                            <div class="scan-instruction">🔴 첫 번째 QR(개인키)을 이 영역에 맞춰주세요</div>
+                            <div class="scan-instruction">QR 코드를 스캔해주세요</div>
                         </div>
                     </div>
                     
@@ -31,6 +31,14 @@
 
 
                 <div id="status" class="hidden"></div>
+                
+                <!-- 지갑 잔고 표시 섹션 -->
+                <div id="balanceSection" class="qr-section hidden">
+                    <h3>💰 지갑 잔고</h3>
+                    <div id="balanceInfo" class="balance-display">
+                        <div class="loading">잔고 조회 중...</div>
+                    </div>
+                </div>
                 
                 <!-- 결제 진행 중 로딩 표시 -->
                 <div id="paymentProcessing" class="qr-section hidden">

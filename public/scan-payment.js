@@ -14,13 +14,41 @@ class PaymentScanner {
         this.walletPrivateKey = null; // 첫 번째 QR에서 저장된 개인키
         this.lastScannedQR = null; // 마지막으로 스캔한 QR 데이터 (중복 방지용)
         this.firstQRScanned = false; // 첫 번째 QR 스캔 완료 여부
+        this.serverConfig = null; // 서버에서 가져온 설정
         this.init();
     }
 
     async init() {
         this.bindEvents();
         this.initializeEthers();
+        await this.loadServerConfig();
         this.checkForStoredWalletInfo();
+    }
+
+    async loadServerConfig() {
+        try {
+            this.addDebugLog('서버 설정 로드 중...');
+            const response = await fetch('/api/config');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            this.serverConfig = await response.json();
+            this.addDebugLog(`서버 설정 로드 성공: ${this.serverConfig.serverUrl}`);
+            
+        } catch (error) {
+            this.addDebugLog(`서버 설정 로드 실패: ${error.message}`);
+            this.addDebugLog('기본 설정값을 사용합니다.');
+            
+            // 기본값 설정
+            this.serverConfig = {
+                serverUrl: window.location.origin, // 현재 도메인 사용
+                chainId: '11155111',
+                token: null,
+                rpcUrl: null
+            };
+        }
     }
     
     checkForStoredWalletInfo() {
@@ -43,7 +71,7 @@ class PaymentScanner {
             window.history.replaceState({}, document.title, cleanUrl);
             
             // 사용자에게 알림
-            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 두 번째 QR 코드를 스캔해주세요!', 'success');
+            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 잔고를 조회하는 중...', 'success');
             
             // 스캔 가이드 업데이트
             const scanGuide = document.querySelector('.scan-instruction');
@@ -51,6 +79,9 @@ class PaymentScanner {
                 scanGuide.textContent = '직접 결제 QR 코드를 스캔해주세요';
                 scanGuide.style.color = '#e74c3c';
             }
+            
+            // 잔고 조회
+            this.fetchAndDisplayBalance();
             
             return;
         }
@@ -73,7 +104,7 @@ class PaymentScanner {
             localStorage.removeItem('temp_wallet_timestamp');
             
             // 사용자에게 알림
-            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 두 번째 QR 코드를 스캔해주세요!', 'success');
+            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 잔고를 조회하는 중...', 'success');
             
             // 스캔 가이드 업데이트
             const scanGuide = document.querySelector('.scan-instruction');
@@ -81,6 +112,9 @@ class PaymentScanner {
                 scanGuide.textContent = '직접 결제 QR 코드를 스캔해주세요';
                 scanGuide.style.color = '#e74c3c';
             }
+            
+            // 잔고 조회
+            this.fetchAndDisplayBalance();
         }
     }
 
@@ -598,6 +632,11 @@ class PaymentScanner {
                 privateKey: privateKey
             };
             
+            this.addDebugLog(`설정된 결제 데이터: ${JSON.stringify(this.paymentData)}`);
+            this.addDebugLog(`- 최종 금액: ${this.paymentData.amount}`);
+            this.addDebugLog(`- 최종 토큰: ${this.paymentData.token}`);
+            this.addDebugLog(`- 최종 수신자: ${this.paymentData.recipient}`);
+            
             // 섹션 전환 - 스캔 섹션 숨기고 결제 진행 표시
             document.getElementById('scannerSection').classList.add('hidden');
             document.getElementById('paymentProcessing').classList.remove('hidden');
@@ -811,7 +850,7 @@ class PaymentScanner {
 
         try {
             // 결제 진행 상태 업데이트
-            this.updatePaymentProgress('서버에 가스리스 결제 요청 중...');
+            this.updatePaymentProgress('서버에 결제 요청 중...');
             
             // 서버에 가스리스 결제 요청
             const result = await this.sendGaslessPayment();
@@ -826,6 +865,8 @@ class PaymentScanner {
     }
 
     async sendGaslessPayment() {
+        this.addDebugLog('가스리스 결제 요청 준비 중...');
+        
         // 서버에 가스리스 결제 요청
         const requestBody = {
             qrData: {
@@ -840,6 +881,9 @@ class PaymentScanner {
             }
         };
 
+        this.addDebugLog(`서버로 전송할 데이터: ${JSON.stringify(requestBody)}`);
+        this.addDebugLog(`요청 URL: ${this.paymentData.serverUrl}/gasless-payment`);
+
         const response = await fetch(`${this.paymentData.serverUrl}/gasless-payment`, {
             method: 'POST',
             headers: {
@@ -848,15 +892,23 @@ class PaymentScanner {
             body: JSON.stringify(requestBody)
         });
 
+        this.addDebugLog(`서버 응답 상태: ${response.status} ${response.statusText}`);
+
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+            this.addDebugLog(`서버 에러 응답: ${JSON.stringify(errorData)}`);
             throw new Error(errorData.message || `HTTP ${response.status}`);
         }
 
-        return await response.json();
+        const result = await response.json();
+        this.addDebugLog(`서버 성공 응답: ${JSON.stringify(result)}`);
+        return result;
     }
 
     handlePaymentSuccess(result) {
+        this.addDebugLog('결제 성공 처리 시작');
+        this.addDebugLog(`결제 결과: ${JSON.stringify(result)}`);
+        
         // 결제 진행 섹션 숨기기
         document.getElementById('paymentProcessing').classList.add('hidden');
         
@@ -865,6 +917,8 @@ class PaymentScanner {
         
         // 토큰 주소를 심볼로 변환하는 함수
         const getTokenSymbol = (tokenAddress) => {
+            this.addDebugLog(`토큰 심볼 변환 시도: ${tokenAddress}`);
+            
             const tokenSymbols = {
                 '0x29756cc': 'USDT',
                 '0xa0b86a33e6885a31c806e95ec8298630': 'USDC',
@@ -872,37 +926,54 @@ class PaymentScanner {
                 '0xa0b86a33e6885a31c806e95e8c8298630': 'USDC'
             };
             
-            if (!tokenAddress) return 'TOKEN';
+            if (!tokenAddress) {
+                this.addDebugLog('토큰 주소가 없어 기본값 TOKEN 반환');
+                return 'TOKEN';
+            }
             
             // 정확한 매칭 시도
             const symbol = tokenSymbols[tokenAddress.toLowerCase()];
-            if (symbol) return symbol;
+            if (symbol) {
+                this.addDebugLog(`정확한 매칭 성공: ${symbol}`);
+                return symbol;
+            }
             
             // 부분 매칭 시도 (주소의 일부가 포함된 경우)
             for (const [addr, sym] of Object.entries(tokenSymbols)) {
                 if (tokenAddress.toLowerCase().includes(addr.toLowerCase()) || 
                     addr.toLowerCase().includes(tokenAddress.toLowerCase())) {
+                    this.addDebugLog(`부분 매칭 성공: ${sym}`);
                     return sym;
                 }
             }
             
+            this.addDebugLog('매칭 실패, 기본값 TOKEN 반환');
             return 'TOKEN';
         };
         
-        // 금액과 토큰 정보 가져오기 (QR 데이터에서)
+        // 금액과 토큰 정보 가져오기 (올바른 paymentData에서)
+        this.addDebugLog(`결제 데이터 확인: ${JSON.stringify(this.paymentData)}`);
+        
         const formatAmount = (amountWei) => {
             try {
+                this.addDebugLog(`금액 변환 시도: ${amountWei}`);
                 // Wei에서 Ether로 변환 (18 decimals)
                 const ethAmount = Number(amountWei) / Math.pow(10, 18);
-                return ethAmount.toFixed(6).replace(/\.?0+$/, ''); // 소수점 뒤 불필요한 0 제거
+                const formatted = ethAmount.toFixed(6).replace(/\.?0+$/, ''); // 소수점 뒤 불필요한 0 제거
+                this.addDebugLog(`금액 변환 결과: ${formatted}`);
+                return formatted;
             } catch (e) {
+                this.addDebugLog(`금액 변환 실패: ${e.message}, 원본 반환`);
                 return amountWei; // 변환 실패시 원본 반환
             }
         };
         
-        const amount = this.qrData?.amountWei ? formatAmount(this.qrData.amountWei) : 'N/A';
-        const token = this.qrData?.token || '';
+        // 올바른 데이터 소스 사용: this.paymentData
+        const amount = this.paymentData?.amount ? formatAmount(this.paymentData.amount) : 'N/A';
+        const token = this.paymentData?.token || '';
         const tokenSymbol = getTokenSymbol(token);
+        
+        this.addDebugLog(`최종 표시될 금액: ${amount} ${tokenSymbol}`);
         
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
@@ -1150,6 +1221,96 @@ class PaymentScanner {
                 this.pauseScanning = false;
             }
         }
+    }
+
+    // 지갑 잔고 조회 및 표시
+    async fetchAndDisplayBalance() {
+        if (!this.walletPrivateKey) {
+            this.addDebugLog('개인키가 없어 잔고를 조회할 수 없습니다.');
+            return;
+        }
+
+        try {
+            this.addDebugLog('서버에 잔고 조회 요청 중...');
+            
+            // 잔고 섹션 표시
+            const balanceSection = document.getElementById('balanceSection');
+            if (balanceSection) {
+                balanceSection.classList.remove('hidden');
+            }
+
+            const response = await fetch('/api/wallet/balance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    privateKey: this.walletPrivateKey
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                throw new Error(errorData.message || `HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+            this.addDebugLog('잔고 조회 성공');
+            this.addDebugLog(`ETH: ${result.balance.ethBalance.formatted}`);
+            this.addDebugLog(`${result.balance.tokenBalance.symbol}: ${result.balance.tokenBalance.formatted}`);
+
+            // 잔고 정보 표시
+            this.displayBalance(result.balance);
+            
+            // 상태 메시지 업데이트
+            this.showStatus('지갑 잔고가 조회되었습니다. 이제 두 번째 QR 코드를 스캔해주세요!', 'success');
+
+        } catch (error) {
+            this.addDebugLog(`잔고 조회 실패: ${error.message}`);
+            this.showStatus(`잔고 조회 실패: ${error.message}`, 'error');
+            
+            // 잔고 섹션 숨기기
+            const balanceSection = document.getElementById('balanceSection');
+            if (balanceSection) {
+                balanceSection.classList.add('hidden');
+            }
+        }
+    }
+
+    // 잔고 정보 UI에 표시
+    displayBalance(balance) {
+        const balanceInfo = document.getElementById('balanceInfo');
+        if (!balanceInfo) return;
+
+        // 주소 축약 함수
+        const shortenAddress = (address) => {
+            if (!address) return '';
+            return `${address.slice(0, 6)}...${address.slice(-4)}`;
+        };
+
+        balanceInfo.innerHTML = `
+            <div class="balance-item">
+                <span class="balance-label">지갑 주소:</span>
+                <span class="balance-value">${shortenAddress(balance.address)}</span>
+            </div>
+            <div class="wallet-address">${balance.address}</div>
+            <div class="balance-item">
+                <span class="balance-label">ETH 잔액:</span>
+                <span class="balance-value">${parseFloat(balance.ethBalance.formatted).toFixed(4)} ETH</span>
+            </div>
+            <div class="balance-item">
+                <span class="balance-label">${balance.tokenBalance.symbol} 잔액:</span>
+                <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(2)} ${balance.tokenBalance.symbol}</span>
+            </div>
+            <div class="balance-item">
+                <span class="balance-label">네트워크:</span>
+                <span class="balance-value">Chain ID ${balance.chainId}</span>
+            </div>
+            <div class="balance-item">
+                <span class="balance-label">조회 시간:</span>
+                <span class="balance-value">${new Date(balance.timestamp).toLocaleString()}</span>
+            </div>
+        `;
     }
 }
 

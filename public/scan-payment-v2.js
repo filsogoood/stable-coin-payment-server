@@ -411,6 +411,7 @@ class DualQRPaymentScanner {
 
         this.paymentData = qrData;
         
+        this.addDebugLog(`설정된 결제 데이터 (v2): ${JSON.stringify(this.paymentData)}`);
         this.addDebugLog(`- 금액: ${qrData.amount}`);
         this.addDebugLog(`- 수신자: ${qrData.recipient}`);
         this.addDebugLog(`- 토큰: ${qrData.token}`);
@@ -447,6 +448,9 @@ class DualQRPaymentScanner {
     }
 
     async sendSessionBasedPayment() {
+        this.addDebugLog('세션 기반 결제 요청 준비 중... (v2)');
+        this.addDebugLog(`서버로 전송할 결제 데이터 (v2): ${JSON.stringify(this.paymentData)}`);
+        
         const response = await fetch('/scan/payment', {
             method: 'POST',
             headers: {
@@ -455,15 +459,23 @@ class DualQRPaymentScanner {
             body: JSON.stringify(this.paymentData)
         });
 
+        this.addDebugLog(`서버 응답 상태 (v2): ${response.status} ${response.statusText}`);
+
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+            this.addDebugLog(`서버 에러 응답 (v2): ${JSON.stringify(errorData)}`);
             throw new Error(errorData.message || `HTTP ${response.status}`);
         }
 
-        return await response.json();
+        const result = await response.json();
+        this.addDebugLog(`서버 성공 응답 (v2): ${JSON.stringify(result)}`);
+        return result;
     }
 
     handlePaymentSuccess(result) {
+        this.addDebugLog('결제 성공 처리 시작 (v2)');
+        this.addDebugLog(`결제 결과: ${JSON.stringify(result)}`);
+        
         this.currentStep = 3;
         this.updateStepIndicator();
         
@@ -477,6 +489,8 @@ class DualQRPaymentScanner {
         
         // 토큰 주소를 심볼로 변환하는 함수
         const getTokenSymbol = (tokenAddress) => {
+            this.addDebugLog(`토큰 심볼 변환 시도 (v2): ${tokenAddress}`);
+            
             const tokenSymbols = {
                 '0x29756cc': 'USDT',
                 '0xa0b86a33e6885a31c806e95ec8298630': 'USDC',
@@ -484,27 +498,39 @@ class DualQRPaymentScanner {
                 '0xa0b86a33e6885a31c806e95e8c8298630': 'USDC'
             };
             
-            if (!tokenAddress) return 'TOKEN';
+            if (!tokenAddress) {
+                this.addDebugLog('토큰 주소가 없어 기본값 TOKEN 반환 (v2)');
+                return 'TOKEN';
+            }
             
             // 정확한 매칭 시도
             const symbol = tokenSymbols[tokenAddress.toLowerCase()];
-            if (symbol) return symbol;
+            if (symbol) {
+                this.addDebugLog(`정확한 매칭 성공 (v2): ${symbol}`);
+                return symbol;
+            }
             
             // 부분 매칭 시도 (주소의 일부가 포함된 경우)
             for (const [addr, sym] of Object.entries(tokenSymbols)) {
                 if (tokenAddress.toLowerCase().includes(addr.toLowerCase()) || 
                     addr.toLowerCase().includes(tokenAddress.toLowerCase())) {
+                    this.addDebugLog(`부분 매칭 성공 (v2): ${sym}`);
                     return sym;
                 }
             }
             
+            this.addDebugLog('매칭 실패, 기본값 TOKEN 반환 (v2)');
             return 'TOKEN';
         };
         
         // 금액과 토큰 정보 가져오기
+        this.addDebugLog(`결제 데이터 확인 (v2): ${JSON.stringify(this.paymentData)}`);
+        
         const amount = this.paymentData?.amount || 'N/A';
         const token = this.paymentData?.token || '';
         const tokenSymbol = getTokenSymbol(token);
+        
+        this.addDebugLog(`최종 표시될 금액 (v2): ${amount} ${tokenSymbol}`);
         
         resultInfo.innerHTML = `
             <div class="status success">

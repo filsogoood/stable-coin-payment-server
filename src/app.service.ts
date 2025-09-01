@@ -471,7 +471,7 @@ export class AppService {
                   to: qrData.to,
                   timestamp: new Date().toISOString(),
                   status: 'success',
-                  productName: '아메리카노', // 상품명 추가
+                  productName: 'CUBE COFFEE', // 상품명 추가
                 }).catch(printError => {
                   this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
                   // 영수증 인쇄 실패해도 결제 성공은 유지
@@ -619,7 +619,7 @@ export class AppService {
           to: paymentResult.recipient,
           timestamp: paymentResult.timestamp,
           status: 'success',
-          productName: '아메리카노', // 상품명 추가
+          productName: 'CUBE COFFEE', // 상품명 추가
           sessionId: paymentResult.sessionId,
         });
       } catch (printError: any) {
@@ -697,7 +697,7 @@ export class AppService {
           fromAddress: item.receiptData.from,
           toAddress: item.receiptData.to,
           timestamp: item.receiptData.timestamp,
-          productName: item.receiptData.productName || '아메리카노', // 상품명 추가
+          productName: item.receiptData.productName || 'CUBE COFFEE', // 상품명 추가
           createdAt: item.createdAt,
           attemptCount: item.attemptCount,
         })),
@@ -776,5 +776,76 @@ export class AppService {
       stats,
       lastUpdate: new Date().toISOString(),
     };
+  }
+
+  // 개인키로 지갑 잔고 조회 (ETH + ERC20)
+  async getWalletBalanceByPrivateKey(privateKey: string) {
+    try {
+      this.logger.log(`[BALANCE_CHECK] 개인키로 지갑 잔고 조회 시작`);
+
+      if (!privateKey || !privateKey.startsWith('0x')) {
+        throw new Error('유효하지 않은 개인키입니다.');
+      }
+
+      // 개인키로 지갑 생성
+      const wallet = new ethers.Wallet(privateKey, this.provider);
+      const address = await wallet.getAddress();
+
+      this.logger.log(`[BALANCE_CHECK] 조회할 주소: ${address}`);
+
+      // ETH 잔액 조회
+      const ethBal = await this.provider.getBalance(address);
+      this.logger.log(`[BALANCE_CHECK] ETH 잔액 조회 완료: ${ethBal.toString()}`);
+
+      // ERC20 잔액 조회
+      const tokenAddress = process.env.TOKEN!;
+      const erc20Abi = [
+        'function balanceOf(address) view returns (uint256)',
+        'function decimals() view returns (uint8)',
+        'function symbol() view returns (string)',
+        'function name() view returns (string)',
+      ] as const;
+
+      const token = new ethers.Contract(tokenAddress, erc20Abi, this.provider);
+      const [rawBal, decimals, symbol, name] = await Promise.all([
+        token.balanceOf(address),
+        token.decimals(),
+        token.symbol(),
+        token.name(),
+      ]);
+
+      this.logger.log(`[BALANCE_CHECK] 토큰 잔액 조회 완료 - ${symbol}: ${rawBal.toString()}`);
+
+      const balanceInfo = {
+        address,
+        ethBalance: {
+          raw: ethBal.toString(),
+          formatted: ethers.formatEther(ethBal),
+          symbol: 'ETH',
+        },
+        tokenBalance: {
+          raw: rawBal.toString(),
+          formatted: ethers.formatUnits(rawBal, decimals),
+          symbol: symbol,
+          name: name,
+          address: tokenAddress,
+          decimals: Number(decimals),
+        },
+        chainId: Number(process.env.CHAIN_ID),
+        rpcUrl: process.env.RPC_URL,
+        timestamp: new Date().toISOString(),
+      };
+
+      this.logger.log(`[BALANCE_CHECK] 잔고 조회 완료 - ETH: ${balanceInfo.ethBalance.formatted}, ${symbol}: ${balanceInfo.tokenBalance.formatted}`);
+
+      return {
+        status: 'success',
+        balance: balanceInfo,
+      };
+
+    } catch (error: any) {
+      this.logger.error(`[BALANCE_CHECK_ERROR] ${error.message}`);
+      throw new BadRequestException(`지갑 잔고 조회 실패: ${error.message}`);
+    }
   }
 }

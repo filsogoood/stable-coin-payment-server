@@ -44,6 +44,7 @@ type AuthItem = {
 // slot0 읽기 (fallback)
 async function readNextNonceViaStorage(provider: ethers.JsonRpcProvider, authority: string): Promise<bigint> {
   const raw = await provider.getStorage(authority, 0);
+  console.log('raw', raw);
   return BigInt(raw || 0);
 }
 

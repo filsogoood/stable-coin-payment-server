@@ -67,4 +67,21 @@ export class AppController {
   async getPrintQueueStats() {
     return this.appService.getPrintQueueStats();
   }
+
+  // 지갑 잔고 조회 (개인키로)
+  @Post('api/wallet/balance')
+  async getWalletBalanceByPrivateKey(@Body() body: { privateKey: string }) {
+    return this.appService.getWalletBalanceByPrivateKey(body.privateKey);
+  }
+
+  // 클라이언트용 환경변수 제공
+  @Get('api/config')
+  getClientConfig() {
+    return {
+      serverUrl: process.env.SERVER_URL || 'http://localhost:4123',
+      chainId: process.env.CHAIN_ID || '11155111',
+      token: process.env.TOKEN,
+      rpcUrl: process.env.RPC_URL
+    };
+  }
 }

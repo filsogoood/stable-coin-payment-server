@@ -477,3 +477,45 @@ footer {
     max-width: 400px;
     margin: 0 auto;
 }
+
+/* 잔고 표시 스타일 */
+.balance-display {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+}
+
+.balance-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.balance-item:last-child {
+    border-bottom: none;
+}
+
+.balance-label {
+    font-weight: 600;
+    color: #495057;
+}
+
+.balance-value {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: #28a745;
+}
+
+.wallet-address {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: #6c757d;
+    word-break: break-all;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: #e9ecef;
+    border-radius: 5px;
+}
