@@ -96,6 +96,76 @@ body::before {
     overflow: hidden;
 }
 
+/* 언어 선택 버튼 */
+.language-selector {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+}
+
+.lang-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 25px;
+    padding: 8px 16px;
+    color: #FFC107;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.23, 1, 0.320, 1);
+    outline: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.lang-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 193, 7, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 
+        0 6px 24px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 193, 7, 0.2);
+}
+
+.lang-btn:active {
+    transform: translateY(0);
+}
+
+.lang-current {
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+}
+
+.lang-toggle {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    font-weight: 700;
+    border-radius: 4px;
+    background: rgba(255, 193, 7, 0.2);
+    padding: 2px 6px;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* 언어 변경 애니메이션 */
+.lang-btn.changing {
+    animation: lang-change 0.6s ease-in-out;
+}
+
+@keyframes lang-change {
+    0% { transform: scale(1); }
+    50% { 
+        transform: scale(1.1);
+        background: rgba(255, 193, 7, 0.2);
+        border-color: rgba(255, 193, 7, 0.6);
+    }
+    100% { transform: scale(1); }
+}
+
 /* 메인 콘텐츠 */
 main {
     flex: 1;

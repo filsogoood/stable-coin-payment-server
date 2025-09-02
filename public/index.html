@@ -8,10 +8,18 @@
 </head>
 <body>
     <div class="container">
+        <!-- 언어 선택 버튼 -->
+        <div class="language-selector">
+            <button id="langToggle" class="lang-btn" data-lang="ko">
+                <span class="lang-current">한국어</span>
+                <span class="lang-toggle">A</span>
+            </button>
+        </div>
+        
         <main>
             <!-- 잔액 표시 섹션 (pk 파라미터 있을 때만 표시) -->
             <div id="balanceSection" class="qr-section hidden">
-                <h2>지갑 잔고</h2>
+                <h2 data-i18n="wallet_balance">지갑 잔고</h2>
                 <div id="balanceInfo" class="balance-display">
                     <div class="loading"></div>
                 </div>
@@ -20,9 +28,9 @@
             <!-- 메인 카드 -->
             <div class="card-grid">
                 <div class="card">
-                    <h2>STABLE CUBE Payment</h2>
-                    <p id="mainDescription">QR 코드를 스캔하여 간편하게 결제를 진행하세요</p>
-                    <a href="/scan" class="btn btn-primary" id="scanBtn">QR 스캔하기</a>
+                    <h2 data-i18n="app_title">STABLE CUBE Payment</h2>
+                    <p id="mainDescription" data-i18n="main_description">QR 코드를 스캔하여 간편하게 결제를 진행하세요</p>
+                    <a href="/scan" class="btn btn-primary" id="scanBtn" data-i18n="scan_qr">QR 스캔하기</a>
                 </div>
             </div>
 
@@ -38,14 +46,159 @@
     </script>
 
     <script>
+        // 다국어 텍스트 정의
+        const i18nTexts = {
+            ko: {
+                app_title: "STABLE CUBE Payment",
+                main_description: "QR 코드를 스캔하여 간편하게 결제를 진행하세요",
+                scan_qr: "QR 스캔하기",
+                wallet_balance: "지갑 잔고",
+                wallet_address: "지갑 주소",
+                balance: "잔액",
+                balance_query_failed: "잔액 조회 실패",
+                payment_qr_scan: "결제 QR 스캔하기",
+                wallet_info_set: "지갑 정보가 설정되었습니다. 잔고를 확인하고 결제를 진행하세요.",
+                qr_scanner: "QR 스캐너",
+                scan_instruction: "QR 코드를 스캔해주세요",
+                camera_start: "카메라 시작",
+                camera_stop: "카메라 정지",
+                payment_processing: "결제 처리 중",
+                payment_progress_text: "안전하게 결제를 처리하고 있습니다...",
+                payment_complete: "결제 완료",
+                new_payment: "새 결제 진행",
+                scan_payment_qr: "결제 QR 코드를 스캔해주세요"
+            },
+            en: {
+                app_title: "STABLE CUBE Payment",
+                main_description: "Scan QR code for seamless payment processing",
+                scan_qr: "Scan QR Code",
+                wallet_balance: "Wallet Balance",
+                wallet_address: "Wallet Address",
+                balance: "Balance",
+                balance_query_failed: "Balance query failed",
+                payment_qr_scan: "Scan Payment QR",
+                wallet_info_set: "Wallet information has been set. Check your balance and proceed with payment.",
+                qr_scanner: "QR Scanner",
+                scan_instruction: "Please scan the QR code",
+                camera_start: "Start Camera",
+                camera_stop: "Stop Camera",
+                payment_processing: "Processing Payment",
+                payment_progress_text: "Securely processing your payment...",
+                payment_complete: "Payment Complete",
+                new_payment: "New Payment",
+                scan_payment_qr: "Please scan the payment QR code"
+            }
+        };
+
         class IndexWalletManager {
             constructor() {
                 this.walletPrivateKey = null;
+                this.currentLang = this.loadLanguage();
+                this.lastBalanceData = null; // 잔액 데이터 저장용
                 this.init();
             }
 
             async init() {
+                this.initializeLanguage();
                 await this.checkForWalletInfo();
+            }
+
+            // 언어 초기화 및 이벤트 설정
+            initializeLanguage() {
+                // 저장된 언어 적용
+                this.applyLanguage(this.currentLang);
+                
+                // 언어 버튼 이벤트 설정
+                const langToggle = document.getElementById('langToggle');
+                if (langToggle) {
+                    langToggle.addEventListener('click', () => this.toggleLanguage());
+                }
+                
+                // 초기 언어 버튼 상태 설정
+                this.updateLanguageButton();
+            }
+
+            // 저장된 언어 로드
+            loadLanguage() {
+                return sessionStorage.getItem('preferred_language') || 'ko';
+            }
+
+            // 언어 저장
+            saveLanguage(lang) {
+                sessionStorage.setItem('preferred_language', lang);
+            }
+
+            // 언어 토글
+            toggleLanguage() {
+                const newLang = this.currentLang === 'ko' ? 'en' : 'ko';
+                this.currentLang = newLang;
+                this.saveLanguage(newLang);
+                
+                // 애니메이션 효과
+                const langBtn = document.getElementById('langToggle');
+                if (langBtn) {
+                    langBtn.classList.add('changing');
+                    setTimeout(() => {
+                        langBtn.classList.remove('changing');
+                    }, 600);
+                }
+                
+                // 언어 적용
+                this.applyLanguage(newLang);
+                this.updateLanguageButton();
+            }
+
+            // 언어 적용
+            applyLanguage(lang) {
+                const texts = i18nTexts[lang];
+                if (!texts) return;
+
+                // data-i18n 속성을 가진 모든 요소 업데이트
+                document.querySelectorAll('[data-i18n]').forEach(element => {
+                    const key = element.getAttribute('data-i18n');
+                    if (texts[key]) {
+                        if (element.tagName === 'A' || element.tagName === 'BUTTON') {
+                            element.textContent = texts[key];
+                        } else {
+                            element.textContent = texts[key];
+                        }
+                    }
+                });
+
+                // 동적 업데이트가 필요한 요소들
+                const mainDescription = document.getElementById('mainDescription');
+                if (mainDescription && this.walletPrivateKey) {
+                    mainDescription.textContent = texts.wallet_info_set;
+                }
+
+                const scanBtn = document.getElementById('scanBtn');
+                if (scanBtn && this.walletPrivateKey) {
+                    scanBtn.textContent = texts.payment_qr_scan;
+                }
+
+                // 이미 표시된 잔액 정보가 있다면 다시 렌더링
+                const balanceSection = document.getElementById('balanceSection');
+                if (balanceSection && !balanceSection.classList.contains('hidden') && this.lastBalanceData) {
+                    this.displayBalance(this.lastBalanceData);
+                }
+            }
+
+            // 언어 버튼 업데이트
+            updateLanguageButton() {
+                const langCurrent = document.querySelector('.lang-current');
+                const langToggle = document.querySelector('.lang-toggle');
+                
+                if (langCurrent && langToggle) {
+                    if (this.currentLang === 'ko') {
+                        langCurrent.textContent = '한국어';
+                        langToggle.textContent = 'A';
+                        document.getElementById('langToggle').setAttribute('data-lang', 'ko');
+                    } else {
+                        langCurrent.textContent = 'English';
+                        langToggle.textContent = '한';
+                        document.getElementById('langToggle').setAttribute('data-lang', 'en');
+                    }
+                }
             }
 
             async checkForWalletInfo() {
@@ -98,16 +251,18 @@
             }
 
             updateUI() {
+                const texts = i18nTexts[this.currentLang];
+                
                 // 메인 설명 텍스트 업데이트
                 const mainDescription = document.getElementById('mainDescription');
                 if (mainDescription) {
-                    mainDescription.textContent = '지갑 정보가 설정되었습니다. 잔고를 확인하고 결제를 진행하세요.';
+                    mainDescription.textContent = texts.wallet_info_set;
                 }
 
                 // QR 스캔 버튼 텍스트 업데이트
                 const scanBtn = document.getElementById('scanBtn');
                 if (scanBtn) {
-                    scanBtn.textContent = '결제 QR 스캔하기';
+                    scanBtn.textContent = texts.payment_qr_scan;
                 }
             }
 
@@ -144,14 +299,16 @@
                     const result = await response.json();
                     console.log('잔고 조회 성공:', result);
 
-                    // 잔고 정보 표시
+                    // 잔고 데이터 저장 및 표시
+                    this.lastBalanceData = result.balance;
                     this.displayBalance(result.balance);
                     
                     // 조용한 잔고 조회 완료
 
                 } catch (error) {
                     console.error('잔고 조회 실패:', error);
-                    this.showStatus(`잔고 조회 실패: ${error.message}`, 'error');
+                    const texts = i18nTexts[this.currentLang];
+                    this.showStatus(`${texts.balance_query_failed}: ${error.message}`, 'error');
                     
                     // 잔고 섹션 숨기기
                     const balanceSection = document.getElementById('balanceSection');
@@ -165,6 +322,8 @@
                 const balanceInfo = document.getElementById('balanceInfo');
                 if (!balanceInfo) return;
 
+                const texts = i18nTexts[this.currentLang];
+                
                 // 주소 축약 함수
                 const shortenAddress = (address) => {
                     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -172,12 +331,12 @@
 
                 balanceInfo.innerHTML = `
                     <div class="balance-item">
-                        <span class="balance-label">지갑 주소:</span>
+                        <span class="balance-label">${texts.wallet_address}:</span>
                         <span class="balance-value">${shortenAddress(balance.address)}</span>
                     </div>
                     <div class="wallet-address">${balance.address}</div>
                     <div class="balance-item">
-                        <span class="balance-label">${balance.tokenBalance.symbol} 잔액:</span>
+                        <span class="balance-label">${balance.tokenBalance.symbol} ${texts.balance}:</span>
                         <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(2)} ${balance.tokenBalance.symbol}</span>
                     </div>
                 `;

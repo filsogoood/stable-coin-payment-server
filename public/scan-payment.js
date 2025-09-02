@@ -15,6 +15,8 @@ class PaymentScanner {
         this.lastScannedQR = null; // 마지막으로 스캔한 QR 데이터 (중복 방지용)
         this.firstQRScanned = false; // 첫 번째 QR 스캔 완료 여부
         this.serverConfig = null; // 서버에서 가져온 설정
+        this.currentLang = sessionStorage.getItem('preferred_language') || 'ko'; // 언어 설정
+        this.lastBalanceData = null; // 잔액 데이터 저장용
         this.init();
     }
 
@@ -72,11 +74,12 @@ class PaymentScanner {
             
             // 조용한 잔고 조회 시작
             
-            // 스캔 가이드 업데이트
+            // 스캔 가이드 업데이트 - 다국어 지원
             const scanGuide = document.querySelector('.scan-instruction');
             if (scanGuide) {
-                scanGuide.textContent = '직접 결제 QR 코드를 스캔해주세요';
-                scanGuide.style.color = '#e74c3c';
+                const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
+                scanGuide.textContent = texts ? texts.scan_payment_qr : '결제 QR 코드를 스캔해주세요';
+                scanGuide.style.color = '#FFC107';
             }
             
             // 잔고 조회
@@ -104,11 +107,12 @@ class PaymentScanner {
             
             // 조용한 잔고 조회 시작
             
-            // 스캔 가이드 업데이트
+            // 스캔 가이드 업데이트 - 다국어 지원
             const scanGuide = document.querySelector('.scan-instruction');
             if (scanGuide) {
-                scanGuide.textContent = '직접 결제 QR 코드를 스캔해주세요';
-                scanGuide.style.color = '#e74c3c';
+                const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
+                scanGuide.textContent = texts ? texts.scan_payment_qr : '결제 QR 코드를 스캔해주세요';
+                scanGuide.style.color = '#FFC107';
             }
             
             // 잔고 조회
@@ -586,11 +590,12 @@ class PaymentScanner {
             
             // 조용한 잔고 조회 시작
             
-            // 스캔 가이드 업데이트
+            // 스캔 가이드 업데이트 - 다국어 지원
             const scanGuide = document.querySelector('.scan-instruction');
             if (scanGuide) {
-                scanGuide.textContent = '직접 결제 QR 코드를 스캔해주세요';
-                scanGuide.style.color = '#e74c3c';
+                const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
+                scanGuide.textContent = texts ? texts.scan_payment_qr : '결제 QR 코드를 스캔해주세요';
+                scanGuide.style.color = '#FFC107';
             }
             
             // 잔고 조회 및 표시
@@ -1475,7 +1480,8 @@ class PaymentScanner {
             this.addDebugLog(`ETH: ${result.balance.ethBalance.formatted}`);
             this.addDebugLog(`${result.balance.tokenBalance.symbol}: ${result.balance.tokenBalance.formatted}`);
 
-            // 잔고 정보 표시
+            // 잔고 데이터 저장 및 표시
+            this.lastBalanceData = result.balance;
             this.displayBalance(result.balance);
             
             // 조용한 잔고 조회 완료
@@ -1497,6 +1503,11 @@ class PaymentScanner {
         const balanceInfo = document.getElementById('balanceInfo');
         if (!balanceInfo) return;
 
+        const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : {
+            wallet_address: "지갑 주소",
+            balance: "잔액"
+        };
+
         // 주소 축약 함수
         const shortenAddress = (address) => {
             if (!address) return '';
@@ -1505,12 +1516,12 @@ class PaymentScanner {
 
         balanceInfo.innerHTML = `
             <div class="balance-item">
-                <span class="balance-label">지갑 주소:</span>
+                <span class="balance-label">${texts.wallet_address}:</span>
                 <span class="balance-value">${shortenAddress(balance.address)}</span>
             </div>
             <div class="wallet-address">${balance.address}</div>
             <div class="balance-item">
-                <span class="balance-label">${balance.tokenBalance.symbol} 잔액:</span>
+                <span class="balance-label">${balance.tokenBalance.symbol} ${texts.balance}:</span>
                 <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(2)} ${balance.tokenBalance.symbol}</span>
             </div>
         `;
@@ -1522,6 +1533,8 @@ let paymentScannerInstance = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     paymentScannerInstance = new PaymentScanner();
+    // 전역에서 접근 가능하도록 설정
+    window.paymentScannerInstance = paymentScannerInstance;
 });
 
 // 페이지 떠나기 전 정리

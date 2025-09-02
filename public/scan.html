@@ -8,9 +8,17 @@
 </head>
 <body>
     <div class="container">
+        <!-- 언어 선택 버튼 -->
+        <div class="language-selector">
+            <button id="langToggle" class="lang-btn" data-lang="ko">
+                <span class="lang-current">한국어</span>
+                <span class="lang-toggle">A</span>
+            </button>
+        </div>
+        
         <main>
             <div class="qr-section">
-                <h2>QR 스캐너</h2>
+                <h2 data-i18n="qr_scanner">QR 스캐너</h2>
                 
                 <div id="scannerSection">
                     <div class="video-container">
@@ -18,13 +26,13 @@
                         <div class="scanner-overlay"></div>
                         <div class="scan-guide">
                             <div class="scan-frame"></div>
-                            <div class="scan-instruction">QR 코드를 스캔해주세요</div>
+                            <div class="scan-instruction" data-i18n="scan_instruction">QR 코드를 스캔해주세요</div>
                         </div>
                     </div>
                     
                     <div class="text-center mt-2">
-                        <button id="startScanBtn" class="btn btn-primary">카메라 시작</button>
-                        <button id="stopScanBtn" class="btn btn-secondary hidden">카메라 정지</button>
+                        <button id="startScanBtn" class="btn btn-primary" data-i18n="camera_start">카메라 시작</button>
+                        <button id="stopScanBtn" class="btn btn-secondary hidden" data-i18n="camera_stop">카메라 정지</button>
                     </div>
                 </div>
 
@@ -34,7 +42,7 @@
                 
                 <!-- 지갑 잔고 표시 섹션 -->
                 <div id="balanceSection" class="qr-section hidden">
-                    <h3>지갑 잔고</h3>
+                    <h3 data-i18n="wallet_balance">지갑 잔고</h3>
                     <div id="balanceInfo" class="balance-display">
                         <div class="loading"></div>
                     </div>
@@ -42,20 +50,20 @@
                 
                 <!-- 결제 진행 중 로딩 표시 -->
                 <div id="paymentProcessing" class="qr-section hidden">
-                    <h2>결제 처리 중</h2>
+                    <h2 data-i18n="payment_processing">결제 처리 중</h2>
                     <div class="text-center">
                         <div class="loading"></div>
-                        <p id="paymentProgressText">안전하게 결제를 처리하고 있습니다...</p>
+                        <p id="paymentProgressText" data-i18n="payment_progress_text">안전하게 결제를 처리하고 있습니다...</p>
                     </div>
                 </div>
             </div>
 
             <div id="resultSection" class="qr-section hidden">
-                <h2>결제 완료</h2>
+                <h2 data-i18n="payment_complete">결제 완료</h2>
                 <div id="resultInfo"></div>
                 
                 <div class="text-center mt-3">
-                    <button id="newScanBtn" class="btn btn-primary">새 결제 진행</button>
+                    <button id="newScanBtn" class="btn btn-primary" data-i18n="new_payment">새 결제 진행</button>
                 </div>
             </div>
         </main>
@@ -70,6 +78,130 @@
         window.ethers = ethers;
     </script>
     
+    <!-- 다국어 지원 스크립트 -->
+    <script>
+        // scan.html용 다국어 텍스트 정의 (전역 노출)
+        const scanPageI18n = {
+            ko: {
+                qr_scanner: "QR 스캐너",
+                scan_instruction: "QR 코드를 스캔해주세요",
+                camera_start: "카메라 시작",
+                camera_stop: "카메라 정지", 
+                wallet_balance: "지갑 잔고",
+                wallet_address: "지갑 주소",
+                balance: "잔액",
+                payment_processing: "결제 처리 중",
+                payment_progress_text: "안전하게 결제를 처리하고 있습니다...",
+                payment_complete: "결제 완료",
+                new_payment: "새 결제 진행",
+                balance_query_failed: "잔액 조회 실패",
+                scan_payment_qr: "결제 QR 코드를 스캔해주세요"
+            },
+            en: {
+                qr_scanner: "QR Scanner",
+                scan_instruction: "Please scan the QR code",
+                camera_start: "Start Camera",
+                camera_stop: "Stop Camera",
+                wallet_balance: "Wallet Balance", 
+                wallet_address: "Wallet Address",
+                balance: "Balance",
+                payment_processing: "Processing Payment",
+                payment_progress_text: "Securely processing your payment...",
+                payment_complete: "Payment Complete",
+                new_payment: "New Payment",
+                balance_query_failed: "Balance query failed",
+                scan_payment_qr: "Please scan the payment QR code"
+            }
+        };
+
+        // 언어 관리 함수들
+        function loadScanLanguage() {
+            return sessionStorage.getItem('preferred_language') || 'ko';
+        }
+
+        function saveScanLanguage(lang) {
+            sessionStorage.setItem('preferred_language', lang);
+        }
+
+        function applyScanLanguage(lang) {
+            const texts = scanPageI18n[lang];
+            if (!texts) return;
+
+            // data-i18n 속성을 가진 모든 요소 업데이트
+            document.querySelectorAll('[data-i18n]').forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (texts[key]) {
+                    element.textContent = texts[key];
+                }
+            });
+
+            // 페이지 제목도 업데이트
+            document.title = lang === 'ko' ? 'QR 스캔 - STABLE CUBE Payment' : 'QR Scan - STABLE CUBE Payment';
+        }
+
+        function updateScanLanguageButton(currentLang) {
+            const langCurrent = document.querySelector('.lang-current');
+            const langToggle = document.querySelector('.lang-toggle');
+            
+            if (langCurrent && langToggle) {
+                if (currentLang === 'ko') {
+                    langCurrent.textContent = '한국어';
+                    langToggle.textContent = 'A';
+                    document.getElementById('langToggle').setAttribute('data-lang', 'ko');
+                } else {
+                    langCurrent.textContent = 'English';
+                    langToggle.textContent = '한';
+                    document.getElementById('langToggle').setAttribute('data-lang', 'en');
+                }
+            }
+        }
+
+        function toggleScanLanguage() {
+            const currentLang = loadScanLanguage();
+            const newLang = currentLang === 'ko' ? 'en' : 'ko';
+            saveScanLanguage(newLang);
+            
+            // 애니메이션 효과
+            const langBtn = document.getElementById('langToggle');
+            if (langBtn) {
+                langBtn.classList.add('changing');
+                setTimeout(() => {
+                    langBtn.classList.remove('changing');
+                }, 600);
+            }
+            
+            // 언어 적용
+            applyScanLanguage(newLang);
+            updateScanLanguageButton(newLang);
+            
+            // PaymentScanner 인스턴스에 언어 변경 알림 및 잔액 재렌더링
+            if (window.paymentScannerInstance) {
+                window.paymentScannerInstance.currentLang = newLang;
+                
+                // 이미 표시된 잔액 정보가 있다면 다시 렌더링
+                if (window.paymentScannerInstance.lastBalanceData) {
+                    window.paymentScannerInstance.displayBalance(window.paymentScannerInstance.lastBalanceData);
+                }
+            }
+        }
+
+        // 전역으로 노출
+        window.scanPageI18n = scanPageI18n;
+
+        // 페이지 로드 시 언어 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentLang = loadScanLanguage();
+            applyScanLanguage(currentLang);
+            updateScanLanguageButton(currentLang);
+            
+            // 언어 버튼 이벤트 설정
+            const langToggle = document.getElementById('langToggle');
+            if (langToggle) {
+                langToggle.addEventListener('click', toggleScanLanguage);
+            }
+        });
+    </script>
+
     <!-- 페이지 스크립트 -->
     <script src="scan-payment.js"></script>
 </body>
