@@ -52,6 +52,14 @@ export class AppService implements OnModuleInit {
   private provider!: ethers.JsonRpcProvider;
   private relayer!: ethers.Wallet;
 
+  // ERC20 토큰 ABI (잔액 조회용)
+  private readonly ERC20_ABI = [
+    'function balanceOf(address) view returns (uint256)',
+    'function decimals() view returns (uint8)',
+    'function symbol() view returns (string)',
+    'function name() view returns (string)',
+  ] as const;
+
   private readonly DELEGATE_ABI = [
     'function executeSignedTransfer((address from,address token,address to,uint256 amount,uint256 nonce,uint256 deadline) t, bytes sig) external',
     'function nonce() view returns (uint256)', // 뷰 호출용
@@ -1272,12 +1280,24 @@ export class AppService implements OnModuleInit {
     });
 
     try {
-      if (!privateKey || !privateKey.startsWith('0x')) {
-        this.logger.error('[WALLET_BALANCE] 유효하지 않은 개인키 형식:', {
-          hasPrivateKey: !!privateKey,
-          startsWithHex: privateKey?.startsWith('0x')
+      if (!privateKey) {
+        this.logger.error('[WALLET_BALANCE] 개인키가 없습니다');
+        throw new Error('개인키가 제공되지 않았습니다.');
+      }
+
+      // 개인키에 0x 접두사가 없으면 자동으로 추가
+      if (!privateKey.startsWith('0x')) {
+        this.logger.debug('[WALLET_BALANCE] 개인키에 0x 접두사 추가');
+        privateKey = '0x' + privateKey;
+      }
+
+      // 개인키 길이 검증 (0x 포함하여 66자여야 함)
+      if (privateKey.length !== 66) {
+        this.logger.error('[WALLET_BALANCE] 유효하지 않은 개인키 길이:', {
+          length: privateKey.length,
+          expected: 66
         });
-        throw new Error('유효하지 않은 개인키입니다.');
+        throw new Error('유효하지 않은 개인키 길이입니다.');
       }
 
       this.logger.log('[WALLET_BALANCE] 개인키로 지갑 생성 시작');

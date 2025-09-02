@@ -467,10 +467,24 @@ class PaymentScanner {
                 result = result.toString();
             }
             
-            this.addDebugLog('QR 데이터 파싱 시도');
+            this.addDebugLog('QR 데이터 형식 확인 시작');
             
-            // QR 데이터 파싱
-            const qrData = JSON.parse(result);
+            // URL 형태의 첫번째 QR 코드인지 확인
+            if (result.includes('?pk=') && (result.startsWith('http://') || result.startsWith('https://'))) {
+                this.addDebugLog('URL 형태의 첫번째 QR 코드 감지');
+                await this.handleWalletAccessUrl(result);
+                return;
+            }
+            
+            // JSON 형태의 QR 코드 파싱 시도
+            let qrData;
+            try {
+                qrData = JSON.parse(result);
+                this.addDebugLog('JSON QR 데이터 파싱 성공');
+            } catch (parseError) {
+                this.addDebugLog(`JSON 파싱 실패: ${parseError.message}`);
+                throw new Error('지원되지 않는 QR 코드 형식입니다');
+            }
             
             // QR 코드 타입 확인 - 새로운 구조 처리
             if (qrData.type === 'wallet_info') {
@@ -544,6 +558,61 @@ class PaymentScanner {
             this.showStatus('유효하지 않은 QR 코드입니다: ' + error.message, 'error');
             
             // 에러 발생 시 스캔 재개 (첫 번째 QR이었을 경우를 대비)
+            this.pauseScanning = false;
+        }
+    }
+
+    // URL 형태의 첫번째 QR 코드 처리 (pk 파라미터 포함)
+    async handleWalletAccessUrl(url) {
+        this.addDebugLog(`URL 형태 QR 처리: ${url}`);
+        
+        try {
+            // URL에서 파라미터 추출
+            const urlObj = new URL(url);
+            const privateKey = urlObj.searchParams.get('pk');
+            const timestamp = urlObj.searchParams.get('t');
+            
+            if (!privateKey) {
+                throw new Error('개인키 파라미터(pk)가 없습니다');
+            }
+            
+            this.addDebugLog('URL에서 개인키 추출 성공');
+            this.addDebugLog(`- 개인키: ${privateKey.substring(0, 10)}...`);
+            this.addDebugLog(`- 타임스탬프: ${timestamp ? new Date(parseInt(timestamp)).toLocaleString() : '없음'}`);
+            
+            // 개인키 설정 및 첫번째 QR 스캔 완료 표시
+            this.walletPrivateKey = privateKey;
+            this.firstQRScanned = true;
+            
+            // 스캐너 중지 (잔액 표시 후 다시 시작)
+            await this.stopScanner();
+            
+            // 사용자에게 알림
+            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 잔고를 조회하는 중...', 'success');
+            
+            // 스캔 가이드 업데이트
+            const scanGuide = document.querySelector('.scan-instruction');
+            if (scanGuide) {
+                scanGuide.textContent = '직접 결제 QR 코드를 스캔해주세요';
+                scanGuide.style.color = '#e74c3c';
+            }
+            
+            // 잔고 조회 및 표시
+            await this.fetchAndDisplayBalance();
+            
+            // 잔고 조회 완료 후 상태 메시지 업데이트
+            this.showStatus('지갑 잔고가 조회되었습니다. 이제 두 번째 QR 코드를 스캔해주세요!', 'success');
+            
+            // 스캐너 재시작 (두 번째 QR 코드 스캔을 위해)
+            setTimeout(async () => {
+                await this.startScanner();
+            }, 2000);
+            
+        } catch (error) {
+            this.addDebugLog(`URL QR 처리 실패: ${error.message}`);
+            this.showStatus(`첫 번째 QR 코드 처리 실패: ${error.message}`, 'error');
+            
+            // 실패 시 스캔 재개
             this.pauseScanning = false;
         }
     }

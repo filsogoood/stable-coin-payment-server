@@ -9,15 +9,176 @@
 <body>
     <div class="container">
         <main>
-            <div class="card-grid">
-                <div class="card">
-                    <div class="card-icon">📸</div>
-                    <h2>QR 코드 스캔</h2>
-                    <p>QR 코드를 스캔하여 결제를 진행</p>
-                    <a href="/scan" class="btn btn-primary">QR 스캔하기</a>
+            <!-- 잔액 표시 섹션 (pk 파라미터 있을 때만 표시) -->
+            <div id="balanceSection" class="qr-section hidden">
+                <h2>지갑 잔고</h2>
+                <div id="balanceInfo" class="balance-display">
+                    <div class="loading">잔고 조회 중...</div>
                 </div>
             </div>
+
+            <div class="card-grid">
+                <div class="card">
+                    <h2>QR 코드 스캔</h2>
+                    <p id="mainDescription">QR 코드를 스캔하여 결제를 진행</p>
+                    <a href="/scan" class="btn btn-primary" id="scanBtn">QR 스캔하기</a>
+                </div>
+            </div>
+
+            <!-- 상태 메시지 -->
+            <div id="status" class="hidden"></div>
         </main>
     </div>
+
+    <!-- Ethers.js v6 라이브러리 -->
+    <script type="module">
+        import { ethers } from "https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.min.js";
+        window.ethers = ethers;
+    </script>
+
+    <script>
+        class IndexWalletManager {
+            constructor() {
+                this.walletPrivateKey = null;
+                this.init();
+            }
+
+            async init() {
+                await this.checkForWalletInfo();
+            }
+
+            async checkForWalletInfo() {
+                // URL 쿼리 파라미터에서 개인키 확인
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlPrivateKey = urlParams.get('pk');
+                const urlTimestamp = urlParams.get('t');
+                
+                if (urlPrivateKey) {
+                    console.log('첫번째 QR 코드 감지 - 잔액 조회 시작');
+                    console.log('개인키:', urlPrivateKey.substring(0, 10) + '...');
+                    console.log('타임스탬프:', urlTimestamp ? new Date(parseInt(urlTimestamp)).toLocaleString() : '없음');
+                    
+                    // 개인키 설정
+                    this.walletPrivateKey = urlPrivateKey;
+                    
+                    // URL에서 파라미터 제거 (보안상)
+                    const cleanUrl = window.location.origin + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                    
+                    // UI 업데이트
+                    this.updateUI();
+                    
+                    // 잔고 조회
+                    await this.fetchAndDisplayBalance();
+                }
+            }
+
+            updateUI() {
+                // 메인 설명 텍스트 업데이트
+                const mainDescription = document.getElementById('mainDescription');
+                if (mainDescription) {
+                    mainDescription.textContent = '지갑 정보가 설정되었습니다. 잔고를 확인하고 결제를 진행하세요.';
+                }
+
+                // QR 스캔 버튼 텍스트 업데이트
+                const scanBtn = document.getElementById('scanBtn');
+                if (scanBtn) {
+                    scanBtn.textContent = '결제 QR 스캔하기';
+                }
+            }
+
+            async fetchAndDisplayBalance() {
+                if (!this.walletPrivateKey) {
+                    console.log('개인키가 없어 잔고를 조회할 수 없습니다.');
+                    return;
+                }
+
+                try {
+                    console.log('서버에 잔고 조회 요청 중...');
+                    
+                    // 잔고 섹션 표시
+                    const balanceSection = document.getElementById('balanceSection');
+                    if (balanceSection) {
+                        balanceSection.classList.remove('hidden');
+                    }
+
+                    const response = await fetch('/api/wallet/balance', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            privateKey: this.walletPrivateKey
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                        throw new Error(errorData.message || `HTTP ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    console.log('잔고 조회 성공:', result);
+
+                    // 잔고 정보 표시
+                    this.displayBalance(result.balance);
+                    
+                    // 상태 메시지 업데이트
+                    this.showStatus('지갑 잔고가 조회되었습니다. QR 스캔하기 버튼을 눌러 결제를 진행하세요.', 'success');
+
+                } catch (error) {
+                    console.error('잔고 조회 실패:', error);
+                    this.showStatus(`잔고 조회 실패: ${error.message}`, 'error');
+                    
+                    // 잔고 섹션 숨기기
+                    const balanceSection = document.getElementById('balanceSection');
+                    if (balanceSection) {
+                        balanceSection.classList.add('hidden');
+                    }
+                }
+            }
+
+            displayBalance(balance) {
+                const balanceInfo = document.getElementById('balanceInfo');
+                if (!balanceInfo) return;
+
+                // 주소 축약 함수
+                const shortenAddress = (address) => {
+                    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+                };
+
+                balanceInfo.innerHTML = `
+                    <div class="balance-item">
+                        <span class="balance-label">지갑 주소:</span>
+                        <span class="balance-value">${shortenAddress(balance.address)}</span>
+                    </div>
+                    <div class="wallet-address">${balance.address}</div>
+                    <div class="balance-item">
+                        <span class="balance-label">${balance.tokenBalance.symbol} 잔액:</span>
+                        <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(2)} ${balance.tokenBalance.symbol}</span>
+                    </div>
+                `;
+            }
+
+            showStatus(message, type) {
+                const statusDiv = document.getElementById('status');
+                if (!statusDiv) return;
+
+                statusDiv.textContent = message;
+                statusDiv.className = `status ${type}`;
+                statusDiv.classList.remove('hidden');
+
+                // 5초 후 자동 숨김
+                setTimeout(() => {
+                    statusDiv.classList.add('hidden');
+                }, 5000);
+            }
+        }
+
+        // DOM 로드 완료 후 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            new IndexWalletManager();
+        });
+    </script>
 </body>
 </html>
