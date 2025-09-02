@@ -35,7 +35,6 @@ try {
     'CHAIN_ID',
     'SPONSOR_PK',
     'PORT',
-    'ENCRYPTION_KEY',
   ] as const;
   
   const loadedKeys: string[] = [];

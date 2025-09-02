@@ -179,8 +179,8 @@ export class AppController {
     this.logger.debug('[GET /api/config] 클라이언트 설정 요청');
     try {
       const config = {
-        serverUrl: process.env.SERVER_URL || 'http://localhost:4123',
-        chainId: process.env.CHAIN_ID || '11155111',
+        serverUrl: process.env.SERVER_URL,
+        chainId: process.env.CHAIN_ID,
         token: process.env.TOKEN,
         rpcUrl: process.env.RPC_URL
       };

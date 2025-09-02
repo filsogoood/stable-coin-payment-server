@@ -607,7 +607,7 @@ class PaymentScanner {
             this.addDebugLog(`- 토큰: ${paymentData.token}`);
             
             // 서버 URL 처리 - QR 코드에 없으면 환경변수 또는 기본값 사용
-            const serverUrl = paymentData.serverUrl || 'https://ccd794063d7c.ngrok-free.app';
+            const serverUrl = paymentData.serverUrl || 'https://1ff309a6f498.ngrok-free.app';
             this.addDebugLog(`- 서버 URL: ${serverUrl} ${paymentData.serverUrl ? '(QR에서)' : '(기본값)'}`);
             
             // 개인키 처리 - QR에 포함된 개인키 우선 사용
@@ -878,7 +878,7 @@ class PaymentScanner {
         
         this.addDebugLog(`서명 데이터: chainId=${chainId}, delegateAddress=${delegateAddress}`);
         
-        // provider 없이 wallet만 생성
+        // 기존 개인키로 wallet 객체 생성 (새로운 지갑이 아님)
         const wallet = new window.ethers.Wallet(privateKey);
         const authority = wallet.address; // 사용자 EOA 주소
         
@@ -929,31 +929,20 @@ class PaymentScanner {
     async generateEIP7702Authorization(wallet, chainId, delegateAddress, nonce) {
         this.addDebugLog('EIP-7702 Authorization 서명 생성 시작');
         
-        // EIP-7702 명세: msg = keccak(MAGIC || rlp([chain_id, address, nonce]))
-        const MAGIC = 0x05;
+        // ethers.js signer.authorize() 메서드 사용
+        const auth = await wallet.authorize({
+            address: delegateAddress,
+            nonce: nonce,
+            chainId: chainId,
+        });
         
-        // RLP 인코딩: [chain_id, address, nonce]
-        const authData = window.ethers.encodeRlp([
-            window.ethers.toBeHex(chainId, 32),
-            delegateAddress,  // delegation target address
-            window.ethers.toBeHex(nonce, 32)
-        ]);
-        
-        const message = window.ethers.keccak256(window.ethers.concat([
-            new Uint8Array([MAGIC]), 
-            window.ethers.getBytes(authData)
-        ]));
-        
-        // 메시지에 서명
-        const signature = await wallet.signMessage(window.ethers.getBytes(message));
-        
-        this.addDebugLog(`EIP-7702 서명 완료: ${signature}`);
+        this.addDebugLog(`EIP-7702 서명 완료: ${auth.signature}`);
         
         return {
-            chainId: chainId,
-            address: delegateAddress,  // delegation target
-            nonce: nonce,
-            signature: signature
+            chainId: Number(auth.chainId),           // BigInt → number
+            address: auth.address,                   // delegation target
+            nonce: Number(auth.nonce),               // BigInt → number
+            signature: auth.signature.serialized    // Signature 객체를 문자열로 변환
         };
     }
 
@@ -1007,14 +996,14 @@ class PaymentScanner {
             ]
         };
         
-        // Transfer 데이터
+        // Transfer 데이터 (서명용 - BigInt로 변환)
         const transfer = {
             from: authority,
             token: this.paymentData.token,
             to: this.paymentData.recipient,
-            amount: this.paymentData.amount,
-            nonce: transferData.nonce,
-            deadline: transferData.deadline
+            amount: BigInt(this.paymentData.amount),
+            nonce: BigInt(transferData.nonce),
+            deadline: BigInt(transferData.deadline)
         };
         
         // EIP-712 서명
@@ -1025,7 +1014,14 @@ class PaymentScanner {
         return {
             domain: domain,
             types: types,
-            transfer: transfer,
+            transfer: {
+                from: transfer.from,
+                token: transfer.token,
+                to: transfer.to,
+                amount: transfer.amount.toString(),      // BigInt → string
+                nonce: transfer.nonce.toString(),        // BigInt → string  
+                deadline: transfer.deadline.toString()   // BigInt → string
+            },
             signature: signature
         };
     }
