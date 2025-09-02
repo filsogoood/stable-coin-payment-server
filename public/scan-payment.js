@@ -70,8 +70,7 @@ class PaymentScanner {
             const cleanUrl = window.location.origin + window.location.pathname;
             window.history.replaceState({}, document.title, cleanUrl);
             
-            // 사용자에게 알림
-            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 잔고를 조회하는 중...', 'success');
+            // 조용한 잔고 조회 시작
             
             // 스캔 가이드 업데이트
             const scanGuide = document.querySelector('.scan-instruction');
@@ -103,8 +102,7 @@ class PaymentScanner {
             localStorage.removeItem('temp_wallet_private_key');
             localStorage.removeItem('temp_wallet_timestamp');
             
-            // 사용자에게 알림
-            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 잔고를 조회하는 중...', 'success');
+            // 조용한 잔고 조회 시작
             
             // 스캔 가이드 업데이트
             const scanGuide = document.querySelector('.scan-instruction');
@@ -152,8 +150,7 @@ class PaymentScanner {
             return;
         }
         
-        this.addDebugLog('모든 라이브러리 로드 완료');
-        this.showStatus('라이브러리 로드 완료. QR 스캔을 시작할 수 있습니다.', 'info');
+        // 라이브러리 로드 완료 - 사용자 안내 메시지 제거
     }
 
 
@@ -587,8 +584,7 @@ class PaymentScanner {
             // 스캐너 중지 (잔액 표시 후 다시 시작)
             await this.stopScanner();
             
-            // 사용자에게 알림
-            this.showStatus('첫 번째 QR 코드로부터 지갑 정보가 설정되었습니다. 잔고를 조회하는 중...', 'success');
+            // 조용한 잔고 조회 시작
             
             // 스캔 가이드 업데이트
             const scanGuide = document.querySelector('.scan-instruction');
@@ -600,8 +596,7 @@ class PaymentScanner {
             // 잔고 조회 및 표시
             await this.fetchAndDisplayBalance();
             
-            // 잔고 조회 완료 후 상태 메시지 업데이트
-            this.showStatus('지갑 잔고가 조회되었습니다. 이제 두 번째 QR 코드를 스캔해주세요!', 'success');
+            // 조용한 잔고 조회 완료
             
             // 스캐너 재시작 (두 번째 QR 코드 스캔을 위해)
             setTimeout(async () => {
@@ -1316,16 +1311,8 @@ class PaymentScanner {
     }
 
     addDebugLog(message) {
-        const timestamp = new Date().toLocaleTimeString();
-        this.debugLogs.push(`[${timestamp}] ${message}`);
-        
-        // 최대 50개 로그만 유지
-        if (this.debugLogs.length > 50) {
-            this.debugLogs.shift();
-        }
-        
-        // 콘솔에도 출력
-        console.log(message);
+        // 디버그 로그 비활성화 - 프로덕션 환경에서는 로그 출력 없음
+        return;
     }
 
 
@@ -1491,8 +1478,7 @@ class PaymentScanner {
             // 잔고 정보 표시
             this.displayBalance(result.balance);
             
-            // 상태 메시지 업데이트
-            this.showStatus('지갑 잔고가 조회되었습니다. 이제 두 번째 QR 코드를 스캔해주세요!', 'success');
+            // 조용한 잔고 조회 완료
 
         } catch (error) {
             this.addDebugLog(`잔고 조회 실패: ${error.message}`);
@@ -1524,20 +1510,8 @@ class PaymentScanner {
             </div>
             <div class="wallet-address">${balance.address}</div>
             <div class="balance-item">
-                <span class="balance-label">ETH 잔액:</span>
-                <span class="balance-value">${parseFloat(balance.ethBalance.formatted).toFixed(4)} ETH</span>
-            </div>
-            <div class="balance-item">
                 <span class="balance-label">${balance.tokenBalance.symbol} 잔액:</span>
                 <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(2)} ${balance.tokenBalance.symbol}</span>
-            </div>
-            <div class="balance-item">
-                <span class="balance-label">네트워크:</span>
-                <span class="balance-value">Chain ID ${balance.chainId}</span>
-            </div>
-            <div class="balance-item">
-                <span class="balance-label">조회 시간:</span>
-                <span class="balance-value">${new Date(balance.timestamp).toLocaleString()}</span>
             </div>
         `;
     }

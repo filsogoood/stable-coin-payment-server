@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR 코드 스캔 - 가스리스 결제</title>
+    <title>STABLE CUBE Payment</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <main>
             <div class="qr-section">
-                <h2>QR 코드 스캐너</h2>
+                <h2>QR 스캐너</h2>
                 
                 <div id="scannerSection">
                     <div class="video-container">
@@ -36,26 +36,26 @@
                 <div id="balanceSection" class="qr-section hidden">
                     <h3>지갑 잔고</h3>
                     <div id="balanceInfo" class="balance-display">
-                        <div class="loading">잔고 조회 중...</div>
+                        <div class="loading"></div>
                     </div>
                 </div>
                 
                 <!-- 결제 진행 중 로딩 표시 -->
                 <div id="paymentProcessing" class="qr-section hidden">
-                    <h2>결제 진행 중</h2>
+                    <h2>결제 처리 중</h2>
                     <div class="text-center">
                         <div class="loading"></div>
-                        <p id="paymentProgressText">결제를 처리하고 있습니다...</p>
+                        <p id="paymentProgressText">안전하게 결제를 처리하고 있습니다...</p>
                     </div>
                 </div>
             </div>
 
             <div id="resultSection" class="qr-section hidden">
-                <h2>결제 결과</h2>
+                <h2>결제 완료</h2>
                 <div id="resultInfo"></div>
                 
                 <div class="text-center mt-3">
-                    <button id="newScanBtn" class="btn btn-primary">새로운 스캔</button>
+                    <button id="newScanBtn" class="btn btn-primary">새 결제 진행</button>
                 </div>
             </div>
         </main>

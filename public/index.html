@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>결제</title>
+    <title>STABLE CUBE Payment</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,14 +13,15 @@
             <div id="balanceSection" class="qr-section hidden">
                 <h2>지갑 잔고</h2>
                 <div id="balanceInfo" class="balance-display">
-                    <div class="loading">잔고 조회 중...</div>
+                    <div class="loading"></div>
                 </div>
             </div>
 
+            <!-- 메인 카드 -->
             <div class="card-grid">
                 <div class="card">
-                    <h2>QR 코드 스캔</h2>
-                    <p id="mainDescription">QR 코드를 스캔하여 결제를 진행</p>
+                    <h2>STABLE CUBE Payment</h2>
+                    <p id="mainDescription">QR 코드를 스캔하여 간편하게 결제를 진행하세요</p>
                     <a href="/scan" class="btn btn-primary" id="scanBtn">QR 스캔하기</a>
                 </div>
             </div>
@@ -58,6 +59,10 @@
                     console.log('개인키:', urlPrivateKey.substring(0, 10) + '...');
                     console.log('타임스탬프:', urlTimestamp ? new Date(parseInt(urlTimestamp)).toLocaleString() : '없음');
                     
+                    // 개인키를 sessionStorage에 저장 (새로고침 시에도 유지)
+                    sessionStorage.setItem('wallet_private_key', urlPrivateKey);
+                    sessionStorage.setItem('wallet_timestamp', urlTimestamp || Date.now().toString());
+                    
                     // 개인키 설정
                     this.walletPrivateKey = urlPrivateKey;
                     
@@ -70,6 +75,25 @@
                     
                     // 잔고 조회
                     await this.fetchAndDisplayBalance();
+                } else {
+                    // URL에 pk가 없으면 sessionStorage에서 확인
+                    const storedPrivateKey = sessionStorage.getItem('wallet_private_key');
+                    const storedTimestamp = sessionStorage.getItem('wallet_timestamp');
+                    
+                    if (storedPrivateKey) {
+                        console.log('sessionStorage에서 개인키 복원');
+                        console.log('개인키:', storedPrivateKey.substring(0, 10) + '...');
+                        console.log('타임스탬프:', storedTimestamp ? new Date(parseInt(storedTimestamp)).toLocaleString() : '없음');
+                        
+                        // 개인키 설정
+                        this.walletPrivateKey = storedPrivateKey;
+                        
+                        // UI 업데이트
+                        this.updateUI();
+                        
+                        // 잔고 조회
+                        await this.fetchAndDisplayBalance();
+                    }
                 }
             }
 
@@ -123,8 +147,7 @@
                     // 잔고 정보 표시
                     this.displayBalance(result.balance);
                     
-                    // 상태 메시지 업데이트
-                    this.showStatus('지갑 잔고가 조회되었습니다. QR 스캔하기 버튼을 눌러 결제를 진행하세요.', 'success');
+                    // 조용한 잔고 조회 완료
 
                 } catch (error) {
                     console.error('잔고 조회 실패:', error);
