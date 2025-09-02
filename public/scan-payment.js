@@ -482,15 +482,20 @@ class PaymentScanner {
             try {
                 qrData = JSON.parse(result);
                 this.addDebugLog('JSON QR 데이터 파싱 성공');
+                this.addDebugLog(`파싱된 QR 데이터: ${JSON.stringify(qrData)}`);
+                this.addDebugLog(`QR 데이터 상품명 확인: ${qrData.productName}`);
             } catch (parseError) {
                 this.addDebugLog(`JSON 파싱 실패: ${parseError.message}`);
                 throw new Error('지원되지 않는 QR 코드 형식입니다');
             }
             
             // QR 코드 타입 확인 - 새로운 구조 처리
+            this.addDebugLog(`🔍 QR 타입 확인: ${qrData.type || 'type 없음'}`);
+            this.addDebugLog(`🔍 QR 전체 데이터: ${JSON.stringify(qrData)}`);
+            
             if (qrData.type === 'wallet_info') {
                 // 첫 번째 QR: 결제 사이트 접속용 (개인키 + 사이트 URL)
-                this.addDebugLog('결제 사이트 접속용 QR 코드 처리 시작');
+                this.addDebugLog('🔑 결제 사이트 접속용 QR 코드 처리 시작');
                 
                 // 개인키 저장
                 this.walletPrivateKey = qrData.privateKey;
@@ -518,7 +523,7 @@ class PaymentScanner {
                 
             } else if (qrData.type === 'payment_request') {
                 // 두 번째 QR: 직접 결제용 (개인키 포함, 독립적)
-                this.addDebugLog('직접 결제용 QR 코드 처리 시작');
+                this.addDebugLog('💳 직접 결제용 QR 코드 처리 시작');
                 
                 // 개인키가 QR에 포함되어 있으므로 즉시 결제 가능
                 if (qrData.privateKey) {
@@ -674,6 +679,13 @@ class PaymentScanner {
             this.addDebugLog(`- 금액: ${paymentData.amount}`);
             this.addDebugLog(`- 수신자: ${paymentData.recipient}`);
             this.addDebugLog(`- 토큰: ${paymentData.token}`);
+            this.addDebugLog(`- 상품명 디버깅:`);
+            this.addDebugLog(`  - paymentData.productName: ${paymentData.productName}`);
+            this.addDebugLog(`  - paymentData.product: ${paymentData.product}`);
+            this.addDebugLog(`  - paymentData.item: ${paymentData.item}`);
+            this.addDebugLog(`  - paymentData.name: ${paymentData.name}`);
+            this.addDebugLog(`- 최종 상품명: ${paymentData.productName || paymentData.product || '상품명 없음'}`);
+            this.addDebugLog(`- 전체 QR 데이터: ${JSON.stringify(paymentData)}`);
             
             // 서버 URL 처리 - QR 코드에 없으면 환경변수 또는 기본값 사용
             const serverUrl = paymentData.serverUrl || 'https://1ff309a6f498.ngrok-free.app';
@@ -859,10 +871,12 @@ class PaymentScanner {
 
     // 기존 방식 결제 처리 (단일 QR)
     handleDirectPayment(paymentData) {
-        this.addDebugLog('QR 데이터 파싱 성공');
+        this.addDebugLog('📱 기존 방식 QR 데이터 파싱 성공');
         this.addDebugLog(`- 금액: ${paymentData.amount}`);
         this.addDebugLog(`- 수신자: ${paymentData.recipient}`);
         this.addDebugLog(`- 토큰: ${paymentData.token}`);
+        this.addDebugLog(`- 상품명: ${paymentData.productName || paymentData.product || '상품명 없음'}`);
+        this.addDebugLog(`- 전체 QR 데이터: ${JSON.stringify(paymentData)}`);
         
         this.paymentData = paymentData;
         
@@ -1104,17 +1118,43 @@ class PaymentScanner {
             publicKey: signatures.publicKey?.substring(0, 20) + '...'
         })}`);
         
+        // 상품명 정보 추가
+        const productName = this.paymentData?.productName || 
+                           this.paymentData?.product || 
+                           this.paymentData?.item || 
+                           this.paymentData?.name;
+        
+        this.addDebugLog(`서버 전송 전 상품명 확인 상세:`);
+        this.addDebugLog(`  - this.paymentData?.productName: ${this.paymentData?.productName}`);
+        this.addDebugLog(`  - this.paymentData?.product: ${this.paymentData?.product}`);
+        this.addDebugLog(`  - this.paymentData?.item: ${this.paymentData?.item}`);
+        this.addDebugLog(`  - this.paymentData?.name: ${this.paymentData?.name}`);
+        this.addDebugLog(`  - 최종 productName: ${productName || '상품명 없음'}`);
+        this.addDebugLog(`  - this.paymentData 전체: ${JSON.stringify(this.paymentData)}`);
+        
+        const requestData = {
+            authority: signatures.authority,
+            authorization: signatures.authSignature,
+            transfer: signatures.transferSignature,
+            publicKey: signatures.publicKey
+        };
+        
+        // 상품명이 있으면 추가
+        if (productName) {
+            requestData.productName = productName;
+            this.addDebugLog(`✅ 서버로 상품명 전송: ${productName}`);
+        } else {
+            this.addDebugLog('⚠️ 서버로 전송할 상품명이 없음');
+        }
+        
+        this.addDebugLog(`서버 전송 데이터: ${JSON.stringify(requestData)}`);
+        
         const response = await fetch(`${this.paymentData.serverUrl}/payment-signed`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                authority: signatures.authority,
-                authorization: signatures.authSignature,
-                transfer: signatures.transferSignature,
-                publicKey: signatures.publicKey
-            })
+            body: JSON.stringify(requestData)
         });
 
         this.addDebugLog(`서버 응답 상태: ${response.status} ${response.statusText}`);
@@ -1202,19 +1242,40 @@ class PaymentScanner {
         const token = this.paymentData?.token || '';
         const tokenSymbol = getTokenSymbol(token);
         
-        this.addDebugLog(`최종 표시될 금액: ${amount} ${tokenSymbol}`);
+        // 상품명 정보 추출 (서버 응답 우선, 그 다음 QR 데이터)
+        const productName = result?.productName || 
+                           result?.product ||
+                           this.paymentData?.productName || 
+                           this.paymentData?.product || 
+                           this.paymentData?.item || 
+                           this.paymentData?.name || 
+                           '상품';
+        
+        this.addDebugLog(`상품명 추출 과정:`);
+        this.addDebugLog(`- 서버 응답 productName: ${result?.productName}`);
+        this.addDebugLog(`- 서버 응답 product: ${result?.product}`);
+        this.addDebugLog(`- QR 데이터 productName: ${this.paymentData?.productName}`);
+        this.addDebugLog(`- QR 데이터 product: ${this.paymentData?.product}`);
+        this.addDebugLog(`- QR 데이터 item: ${this.paymentData?.item}`);
+        this.addDebugLog(`- QR 데이터 name: ${this.paymentData?.name}`);
+        this.addDebugLog(`- 최종 상품명: ${productName}`);
+        
+        this.addDebugLog(`최종 표시될 정보: ${amount} ${tokenSymbol}, 상품: ${productName}`);
         
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
-            <div class="status success">
-                <h3>결제 완료!</h3>
-                <strong>거래 해시:</strong> <span style="word-break: break-all;">${result.txHash}</span><br>
-                <strong>결제 금액:</strong> ${amount} ${tokenSymbol}<br>
-                <strong>상태:</strong> ${result.status}<br>
-                <strong>완료 시간:</strong> ${new Date().toLocaleString()}
-            </div>
-            <div class="status info mt-2">
-                결제가 성공적으로 완료되었습니다!
+            <div class="payment-success-content">
+                <div class="product-info">
+                    <div class="product-name-large">${productName}</div>
+                    <div class="amount-display">${amount} ${tokenSymbol}</div>
+                </div>
+                <div class="transaction-info">
+                    <div class="tx-label">거래 해시</div>
+                    <div class="tx-hash-full">${result.txHash}</div>
+                </div>
+                <div class="success-message-simple">
+                    구매가 완료되었습니다!
+                </div>
             </div>
         `;
     }
@@ -1233,16 +1294,26 @@ class PaymentScanner {
         // 결과 섹션 표시 (에러 결과)
         document.getElementById('resultSection').classList.remove('hidden');
         
+        // 실패해도 트랜잭션 해시가 있을 수 있음 (리버트된 트랜잭션)
+        const txHashSection = error.txHash ? `
+            <div class="transaction-info">
+                <div class="tx-label">실패한 거래 해시</div>
+                <div class="tx-hash-full">${error.txHash}</div>
+            </div>
+        ` : '';
+        
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
-            <div class="status error">
-                <h3>결제 실패</h3>
-                <strong>오류 내용:</strong> ${error.message}<br>
-                <strong>실패 시간:</strong> ${new Date().toLocaleString()}
-            </div>
-            <div class="status info mt-2">
-                결제 처리 중 오류가 발생했습니다.<br>
-                다시 시도하거나 관리자에게 문의해주세요.
+            <div class="payment-error-content">
+                <h2>결제 실패</h2>
+                <div class="error-info">
+                    <div class="error-message">${error.message}</div>
+                    <div class="error-time">실패 시간: ${new Date().toLocaleString()}</div>
+                </div>
+                ${txHashSection}
+                <div class="error-action">
+                    다시 시도하거나 관리자에게 문의해주세요.
+                </div>
             </div>
         `;
         
@@ -1315,8 +1386,17 @@ class PaymentScanner {
     }
 
     addDebugLog(message) {
-        // 디버그 로그 비활성화 - 프로덕션 환경에서는 로그 출력 없음
-        return;
+        // 디버깅을 위해 임시 활성화
+        console.log(`[PaymentScanner] ${message}`);
+        
+        // 화면에도 표시 (개발용)
+        const timestamp = new Date().toLocaleTimeString();
+        this.debugLogs.push(`[${timestamp}] ${message}`);
+        
+        // 최대 50개 로그만 유지
+        if (this.debugLogs.length > 50) {
+            this.debugLogs.shift();
+        }
     }
 
 

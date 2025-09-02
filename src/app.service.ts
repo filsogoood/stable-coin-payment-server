@@ -736,7 +736,7 @@ export class AppService implements OnModuleInit {
                   to: qrData.to,
                   timestamp: new Date().toISOString(),
                   status: 'success',
-                  productName: 'CUBE COFFEE', // 상품명 추가
+                  productName: qrData.productName || '기타', // QR 데이터에서 상품명 사용, 없으면 기본값
                 }).catch(printError => {
                   this.logger.warn(`[RECEIPT_PRINT_ERROR] ${printError.message}`);
                   // 영수증 인쇄 실패해도 결제 성공은 유지
@@ -869,14 +869,15 @@ export class AppService implements OnModuleInit {
   async scanPayment(body: any) {
     this.logger.log('[SCAN_PAYMENT] QR 스캔 결제 실행 시작');
     
-    const { type, sessionId, recipient, amount, token } = body;
+    const { type, sessionId, recipient, amount, token, productName } = body;
     
     this.logger.debug('[SCAN_PAYMENT] 요청 데이터:', {
       type,
       sessionId,
       recipient,
       amount,
-      token
+      token,
+      productName
     });
 
     if (type !== 'payment_request') {
@@ -974,7 +975,7 @@ export class AppService implements OnModuleInit {
           to: paymentResult.recipient,
           timestamp: paymentResult.timestamp,
           status: 'success',
-          productName: 'CUBE COFFEE', // 상품명 추가
+          productName: productName || '기타', // QR 데이터에서 상품명 사용, 없으면 기본값
           sessionId: paymentResult.sessionId,
         };
         
@@ -1117,7 +1118,7 @@ export class AppService implements OnModuleInit {
           fromAddress: item.receiptData.from,
           toAddress: item.receiptData.to,
           timestamp: item.receiptData.timestamp,
-          productName: item.receiptData.productName || 'CUBE COFFEE', // 상품명 추가
+          productName: item.receiptData.productName || '기타', // 상품명 추가
           createdAt: item.createdAt,
           attemptCount: item.attemptCount,
         })),
@@ -1457,15 +1458,19 @@ export class AppService implements OnModuleInit {
 
   // 서명된 결제 처리
   async processSignedPayment(body: any) {
-    const { authority, authorization, transfer, publicKey } = body;
+    const { authority, authorization, transfer, publicKey, productName, product } = body;
     
     this.logger.log('[SIGNED_PAYMENT] 서명된 결제 처리 시작');
     this.logger.debug('[SIGNED_PAYMENT] 받은 데이터:', {
       authority,
       hasAuthorization: !!authorization,
       hasTransfer: !!transfer,
-      publicKey: publicKey?.substring(0, 20) + '...'
+      publicKey: publicKey?.substring(0, 20) + '...',
+      productName: productName || product || '상품명 없음',
+      hasProductName: !!(productName || product)
     });
+    
+    this.logger.log(`[PRODUCT_NAME_TRACKING] 상품명 확인: ${productName || product || '상품명 없음'}`);
     
     try {
       // 공개키 형식 검증
@@ -1503,7 +1508,7 @@ export class AppService implements OnModuleInit {
       });
 
       // 기존 payment 로직 재사용 (이미 서명된 데이터 사용)
-      return this.payment({
+      const paymentResult = await this.payment({
         authority,
         transfer: transfer.transfer,
         domain: transfer.domain,
@@ -1511,6 +1516,17 @@ export class AppService implements OnModuleInit {
         signature712: transfer.signature,
         authorization: authorization
       });
+      
+      // 상품명 정보를 응답에 추가
+      if (productName || product) {
+        this.logger.log(`[PRODUCT_NAME_TRACKING] 응답에 상품명 추가: ${productName || product}`);
+        return {
+          ...paymentResult,
+          productName: productName || product
+        };
+      }
+      
+      return paymentResult;
       
     } catch (error: any) {
       this.logger.error('[SIGNED_PAYMENT] 서명된 결제 처리 실패:', error.message);
