@@ -1214,8 +1214,7 @@ class PaymentScanner {
                 <strong>완료 시간:</strong> ${new Date().toLocaleString()}
             </div>
             <div class="status info mt-2">
-                가스리스 결제가 성공적으로 완료되었습니다!<br>
-                블록체인에서 거래가 확인될 때까지 잠시 기다려주세요.
+                결제가 성공적으로 완료되었습니다!
             </div>
         `;
     }

@@ -749,7 +749,7 @@ export class AppService implements OnModuleInit {
               } else {
                 const response = {
                   status: 'ok',
-                  message: '가스리스 결제가 성공적으로 처리되었습니다.',
+                  message: '결제가 성공적으로 처리되었습니다.',
                   logs: stdout,
                 };
                 
@@ -763,7 +763,7 @@ export class AppService implements OnModuleInit {
               this.logger.error(`[PARSE_EXCEPTION] ${e.message}`);
               resolve({
                 status: 'ok',
-                message: '가스리스 결제가 처리되었습니다.',
+                message: '결제가 처리되었습니다.',
                 logs: stdout,
               });
             }

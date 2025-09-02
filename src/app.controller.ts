@@ -56,14 +56,14 @@ export class AppController {
   // 가스리스 결제 요청 (서버에서 client.ts 실행)
   @Post('gasless-payment')
   async gaslessPayment(@Body() body: any) {
-    this.logger.log('[POST /gasless-payment] 가스리스 결제 요청 시작');
+    this.logger.log('[POST /gasless-payment] 결제 요청 시작');
     this.logger.debug('[POST /gasless-payment] 요청 body:', JSON.stringify(body, null, 2));
     try {
       const result = await this.appService.gaslessPayment(body);
-      this.logger.log('[POST /gasless-payment] 가스리스 결제 완료:', JSON.stringify(result));
+      this.logger.log('[POST /gasless-payment] 결제 완료:', JSON.stringify(result));
       return result;
     } catch (error: any) {
-      this.logger.error('[POST /gasless-payment] 가스리스 결제 오류:', error.message);
+      this.logger.error('[POST /gasless-payment] 결제 오류:', error.message);
       throw error;
     }
   }
