@@ -948,110 +948,149 @@ footer {
 
 
 
-/* 결제 완료 화면 스타일 - 간단한 디자인 */
+/* 결제 완료 화면 스타일 - 모던하고 심플한 디자인 */
 .payment-success-content {
     text-align: center;
-    padding: 1.5rem;
+    padding: 2rem 1.5rem;
     /* iOS Safari fallback */
-    background-color: rgba(40, 40, 40, 0.9);
-    background: rgba(40, 40, 40, 0.9);
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 193, 7, 0.3);
-    border-radius: 20px;
+    background-color: rgba(40, 40, 40, 0.95);
+    background: rgba(40, 40, 40, 0.95);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid rgba(255, 193, 7, 0.25);
+    border-radius: 28px;
     margin: 1rem 0;
     box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
+        0 12px 48px rgba(0, 0, 0, 0.4),
         inset 0 1px 0 rgba(255, 193, 7, 0.1);
 }
 
 .payment-success-content h2 {
     color: #FFC107;
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin-bottom: 1.5rem;
-    text-shadow: 0 0 15px rgba(255, 193, 7, 0.5);
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-bottom: 2rem;
+    letter-spacing: -0.02em;
 }
 
 .product-info {
-    margin: 1.5rem 0;
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .product-name-large {
-    font-weight: 800;
-    color: #FFC107;
-    font-size: 2.2rem;
-    text-shadow: 0 0 20px rgba(255, 193, 7, 0.6);
-    background: linear-gradient(135deg, #FFC107, #FFD54F);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 1rem;
-    line-height: 1.2;
+    font-weight: 700;
+    color: #FFFFFF;
+    font-size: 2.4rem;
+    margin-bottom: 0.8rem;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
 }
 
 .amount-display {
     font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
-    font-weight: 700;
-    color: #FFB300;
-    font-size: 1.5rem;
-    text-shadow: 0 0 15px rgba(255, 179, 0, 0.4);
-    margin-bottom: 1rem;
+    font-weight: 600;
+    color: #FFC107;
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.01em;
 }
 
 .transaction-info {
-    margin: 1.5rem 0;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 193, 7, 0.2);
-    border-radius: 15px;
-    padding: 1rem;
+    margin: 2rem 0;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 0;
 }
 
 .tx-label {
-    color: #FFC107;
+    color: rgba(255, 255, 255, 0.7);
     font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
+    font-weight: 500;
+    margin-bottom: 0.8rem;
     text-align: center;
 }
 
 .tx-hash-full {
     font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 193, 7, 0.3);
-    border-radius: 8px;
-    padding: 0.8rem;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 1rem;
     word-break: break-all;
-    line-height: 1.4;
-    text-align: left;
-    letter-spacing: 0.02em;
+    line-height: 1.5;
+    text-align: center;
+    letter-spacing: 0.01em;
+    transition: all 0.3s ease;
 }
 
 .clickable-hash {
     cursor: pointer;
-    transition: all 0.3s ease;
 }
 
 .clickable-hash:hover {
-    background: rgba(255, 193, 7, 0.1);
-    border-color: rgba(255, 193, 7, 0.5);
+    background: rgba(255, 193, 7, 0.08);
+    border-color: rgba(255, 193, 7, 0.3);
     color: #FFC107;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(255, 193, 7, 0.15);
 }
 
 .success-message-simple {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 1.1rem;
+    color: #4CAF50;
+    font-size: 1rem;
     font-weight: 600;
-    background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(255, 213, 79, 0.1));
-    border: 1px solid rgba(255, 193, 7, 0.2);
-    border-radius: 15px;
-    padding: 1rem;
-    margin-top: 1rem;
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 1rem 0 0 0;
+    margin: 2rem 0 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    letter-spacing: -0.01em;
+}
+
+/* 남은 잔고 스타일 통합 */
+.remaining-balance-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.remaining-balance-content {
+    text-align: center;
+}
+
+.remaining-balance-title {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.01em;
+}
+
+.remaining-balance-amount {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+    color: #FFC107;
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.remaining-balance-text {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+.remaining-balance-error {
+    color: rgba(255, 87, 34, 0.8);
+    font-size: 0.9rem;
+    font-style: italic;
 }
 
 /* 결제 실패 화면 스타일 */
@@ -1113,57 +1152,70 @@ footer {
     margin-top: 1rem;
 }
 
-/* 반응형 디자인 */
+/* 반응형 디자인 - 모던 스타일 */
 @media (max-width: 768px) {
     .payment-success-content,
     .payment-error-content {
-        padding: 1rem;
+        padding: 1.5rem 1rem;
         margin: 0.5rem 0;
+        border-radius: 24px;
     }
     
     .payment-success-content h2,
     .payment-error-content h2 {
-        font-size: 1.5rem;
-        margin-bottom: 1rem;
+        font-size: 1.4rem;
+        margin-bottom: 1.5rem;
     }
     
     .product-name-large {
-        font-size: 1.8rem;
-        margin-bottom: 0.8rem;
+        font-size: 2rem;
+        margin-bottom: 0.6rem;
+        line-height: 1.1;
     }
     
     .amount-display {
-        font-size: 1.3rem;
-        margin-bottom: 0.8rem;
-    }
-    
-    .success-message-simple,
-    .error-action {
-        font-size: 1rem;
-        padding: 0.8rem;
-        margin-top: 0.8rem;
-    }
-    
-    .error-message {
-        font-size: 1.1rem;
-        padding: 0.8rem;
-    }
-    
-    .transaction-info {
-        margin: 1rem 0;
-        padding: 0.8rem;
-    }
-    
-    .tx-label {
-        font-size: 0.8rem;
+        font-size: 1.5rem;
         margin-bottom: 0.4rem;
     }
     
+    .product-info {
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+    }
+    
+    .success-message-simple {
+        font-size: 0.95rem;
+        padding: 0.8rem 0 0 0;
+        margin: 1.5rem 0 0 0;
+    }
+    
+    .transaction-info {
+        margin: 1.5rem 0;
+    }
+    
+    .tx-label {
+        font-size: 0.85rem;
+        margin-bottom: 0.6rem;
+    }
+    
     .tx-hash-full {
-        font-size: 0.7rem;
-        padding: 0.6rem;
-        line-height: 1.3;
-        letter-spacing: 0.01em;
+        font-size: 0.75rem;
+        padding: 0.8rem;
+        line-height: 1.4;
+        border-radius: 10px;
+    }
+    
+    .remaining-balance-section {
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+    }
+    
+    .remaining-balance-title {
+        font-size: 0.85rem;
+    }
+    
+    .remaining-balance-amount {
+        font-size: 1.2rem;
     }
 }
 
