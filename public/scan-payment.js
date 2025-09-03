@@ -688,7 +688,7 @@ class PaymentScanner {
             this.addDebugLog(`- 전체 QR 데이터: ${JSON.stringify(paymentData)}`);
             
             // 서버 URL 처리 - QR 코드에 없으면 환경변수 또는 기본값 사용
-            const serverUrl = paymentData.serverUrl || 'https://1ff309a6f498.ngrok-free.app';
+            const serverUrl = paymentData.serverUrl;
             this.addDebugLog(`- 서버 URL: ${serverUrl} ${paymentData.serverUrl ? '(QR에서)' : '(기본값)'}`);
             
             // 개인키 처리 - QR에 포함된 개인키 우선 사용
