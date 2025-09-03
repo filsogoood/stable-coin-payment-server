@@ -13,6 +13,7 @@ class PaymentScanner {
         this.pauseScanning = false;
         this.walletPrivateKey = null; // 첫 번째 QR에서 저장된 개인키
         this.lastScannedQR = null; // 마지막으로 스캔한 QR 데이터 (중복 방지용)
+        this.lastScannedTime = 0; // 마지막 QR 스캔 시간 (중복 방지용)
         this.firstQRScanned = false; // 첫 번째 QR 스캔 완료 여부
         this.serverConfig = null; // 서버에서 가져온 설정
         this.currentLang = sessionStorage.getItem('preferred_language') || 'ko'; // 언어 설정
@@ -25,6 +26,19 @@ class PaymentScanner {
         this.initializeEthers();
         await this.loadServerConfig();
         this.checkForStoredWalletInfo();
+        
+        // 초기화 후 개인키 상태 확인 및 로그
+        this.logPrivateKeyStatus();
+    }
+    
+    // 개인키 상태 로그 (디버깅용)
+    logPrivateKeyStatus() {
+        this.addDebugLog('📋 현재 개인키 상태 요약:');
+        this.addDebugLog(`  - this.walletPrivateKey: ${this.walletPrivateKey ? '있음(' + this.walletPrivateKey.substring(0, 10) + '...)' : '없음'}`);
+        this.addDebugLog(`  - this.firstQRScanned: ${this.firstQRScanned}`);
+        this.addDebugLog(`  - sessionStorage wallet_private_key: ${sessionStorage.getItem('wallet_private_key') ? '있음' : '없음'}`);
+        this.addDebugLog(`  - localStorage temp_wallet_private_key: ${localStorage.getItem('temp_wallet_private_key') ? '있음' : '없음'}`);
+        this.addDebugLog(`  - URL pk 파라미터: ${new URLSearchParams(window.location.search).get('pk') ? '있음' : '없음'}`);
     }
 
     async loadServerConfig() {
@@ -59,6 +73,10 @@ class PaymentScanner {
         const urlPrivateKey = urlParams.get('pk');
         const urlTimestamp = urlParams.get('t');
         
+        this.addDebugLog('개인키 저장 상태 확인 시작');
+        this.addDebugLog(`URL pk 파라미터: ${urlPrivateKey ? '있음' : '없음'}`);
+        this.addDebugLog(`URL t 파라미터: ${urlTimestamp ? '있음' : '없음'}`);
+        
         if (urlPrivateKey) {
             this.addDebugLog('URL 파라미터로 전달된 개인키 발견');
             this.addDebugLog(`- 개인키: ${urlPrivateKey.substring(0, 10)}...`);
@@ -68,11 +86,49 @@ class PaymentScanner {
             this.walletPrivateKey = urlPrivateKey;
             this.firstQRScanned = true;
             
+            // sessionStorage에 개인키 임시 저장 (페이지 전환 시 유지용)
+            sessionStorage.setItem('wallet_private_key', urlPrivateKey);
+            sessionStorage.setItem('wallet_timestamp', urlTimestamp || Date.now().toString());
+            sessionStorage.setItem('first_qr_scanned', 'true');
+            
+            this.addDebugLog(`✅ 개인키 저장 완료 (메모리 + sessionStorage): ${this.walletPrivateKey.substring(0, 10)}...`);
+            
             // URL에서 파라미터 제거 (보안상)
             const cleanUrl = window.location.origin + window.location.pathname;
             window.history.replaceState({}, document.title, cleanUrl);
             
             // 조용한 잔고 조회 시작
+            
+            // 스캔 가이드 업데이트 - 다국어 지원
+            const scanGuide = document.querySelector('.scan-instruction');
+            if (scanGuide) {
+                const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
+                scanGuide.textContent = texts ? texts.scan_payment_qr : '결제 QR 코드를 스캔해주세요';
+                scanGuide.style.color = '#FFC107';
+            }
+            
+            // 잔고 조회
+            this.fetchAndDisplayBalance();
+            
+            return;
+        }
+        
+        // sessionStorage에서 개인키 복구 시도 (새로운 방식)
+        const sessionPrivateKey = sessionStorage.getItem('wallet_private_key');
+        const sessionTimestamp = sessionStorage.getItem('wallet_timestamp');
+        const sessionFirstQR = sessionStorage.getItem('first_qr_scanned');
+        
+        if (sessionPrivateKey) {
+            this.addDebugLog('sessionStorage에서 개인키 발견');
+            this.addDebugLog(`- 개인키: ${sessionPrivateKey.substring(0, 10)}...`);
+            this.addDebugLog(`- 타임스탬프: ${sessionTimestamp ? new Date(parseInt(sessionTimestamp)).toLocaleString() : '없음'}`);
+            this.addDebugLog(`- 첫QR스캔: ${sessionFirstQR}`);
+            
+            // 개인키 설정
+            this.walletPrivateKey = sessionPrivateKey;
+            this.firstQRScanned = sessionFirstQR === 'true';
+            
+            this.addDebugLog(`✅ sessionStorage에서 개인키 복구 완료: ${this.walletPrivateKey.substring(0, 10)}...`);
             
             // 스캔 가이드 업데이트 - 다국어 지원
             const scanGuide = document.querySelector('.scan-instruction');
@@ -100,6 +156,11 @@ class PaymentScanner {
             // 개인키 설정
             this.walletPrivateKey = storedPrivateKey;
             this.firstQRScanned = true;
+            
+            // sessionStorage로 이전 (새로운 방식으로 통일)
+            sessionStorage.setItem('wallet_private_key', storedPrivateKey);
+            sessionStorage.setItem('wallet_timestamp', storedTimestamp || Date.now().toString());
+            sessionStorage.setItem('first_qr_scanned', 'true');
             
             // 임시 저장된 데이터 정리
             localStorage.removeItem('temp_wallet_private_key');
@@ -455,12 +516,18 @@ class PaymentScanner {
         try {
             this.addDebugLog(`QR 결과 처리 시작: ${result}`);
             
-            // 중복 스캔 방지 - 같은 QR 코드를 연속으로 스캔하지 않도록
-            if (this.lastScannedQR === result) {
-                this.addDebugLog('중복 QR 스캔 감지, 무시함');
+            // 중복 스캔 방지 - 시간 기반으로 개선 (3초 이내 같은 QR 코드는 무시)
+            const currentTime = Date.now();
+            const timeSinceLastScan = currentTime - this.lastScannedTime;
+            
+            if (this.lastScannedQR === result && timeSinceLastScan < 3000) {
+                this.addDebugLog(`중복 QR 스캔 감지 (${timeSinceLastScan}ms 전), 무시함`);
                 return;
             }
+            
+            // 새로운 QR 또는 충분한 시간이 지난 경우 스캔 허용
             this.lastScannedQR = result;
+            this.lastScannedTime = currentTime;
             
             // QR 결과가 문자열인지 확인
             if (typeof result !== 'string') {
@@ -524,17 +591,46 @@ class PaymentScanner {
             } else if (qrData.type === 'payment_request') {
                 // 두 번째 QR: 직접 결제용 (개인키 포함, 독립적)
                 this.addDebugLog('💳 직접 결제용 QR 코드 처리 시작');
+                this.addDebugLog(`💳 DEBUG: 현재 저장된 walletPrivateKey 상태: ${this.walletPrivateKey ? '있음' : '없음'}`);
+                this.addDebugLog(`💳 DEBUG: QR에 개인키 포함 여부: ${qrData.privateKey ? '있음' : '없음'}`);
+                this.addDebugLog(`💳 DEBUG: firstQRScanned 상태: ${this.firstQRScanned}`);
                 
-                // 개인키가 QR에 포함되어 있으므로 즉시 결제 가능
+                // 개인키가 QR에 포함되어 있으면 사용, 없으면 저장된 개인키 사용
                 if (qrData.privateKey) {
                     this.addDebugLog('독립적 결제 QR 감지 - 개인키 포함됨');
                     this.walletPrivateKey = qrData.privateKey;
                     this.firstQRScanned = true;
-                }
+                } else if (this.walletPrivateKey) {
+                    this.addDebugLog('독립적 결제 QR 감지 - 저장된 개인키 사용');
+                    this.firstQRScanned = true;
+                        } else {
+            this.addDebugLog('⚠️ 독립적 결제 QR이지만 개인키가 없습니다');
+            this.addDebugLog('⚠️ 개인키 상태 재확인:');
+            this.addDebugLog(`  - this.walletPrivateKey: ${this.walletPrivateKey || '없음'}`);
+            this.addDebugLog(`  - this.firstQRScanned: ${this.firstQRScanned}`);
+            this.addDebugLog(`  - URL 파라미터 재확인: pk=${new URLSearchParams(window.location.search).get('pk') || '없음'}`);
+            
+            // 통합 개인키 복구 시도
+            if (this.recoverPrivateKey()) {
+                this.addDebugLog(`✅ 개인키 복구 성공! 결제 처리 계속 진행`);
+                // 복구 성공 시 결제 처리 계속 진행하지 않고 다시 이 함수 호출
+                await this.handlePaymentRequestQR(qrData);
+                return;
+            }
+            
+            this.showStatus('개인키가 없습니다. 개인키 접속용 QR을 먼저 스캔해주세요.', 'error');
+            
+            // 중복 방지 데이터 초기화 (다른 QR 스캔 허용)
+            this.clearDuplicatePreventionData();
+            return; // 에러 던지지 말고 리턴해서 스캔 계속 가능하게
+        }
                 
+                this.addDebugLog('💳 결제 QR 처리 - 스캐너 중지 시작');
                 // 스캐너 중지하고 결제 실행
                 await this.stopScanner();
+                this.addDebugLog('💳 결제 QR 처리 - 스캐너 중지 완료, handlePaymentRequestQR 호출');
                 await this.handlePaymentRequestQR(qrData);
+                this.addDebugLog('💳 결제 QR 처리 - handlePaymentRequestQR 완료');
             } 
             // 아래는 기존 암호화 QR 코드 호환성을 위한 처리 (현재 사용 안함)
             else if (qrData.type === 'encrypted_private_key') {
@@ -565,6 +661,9 @@ class PaymentScanner {
             
             // 에러 발생 시 스캔 재개 (첫 번째 QR이었을 경우를 대비)
             this.pauseScanning = false;
+            
+            // 에러 발생 시에도 중복 방지 데이터 초기화 (다음 QR 스캔 허용)
+            this.clearDuplicatePreventionData();
         }
     }
 
@@ -613,12 +712,18 @@ class PaymentScanner {
                 await this.startScanner();
             }, 2000);
             
+            // 첫 번째 QR 처리 완료 후 중복 방지 데이터 초기화
+            this.clearDuplicatePreventionData();
+            
         } catch (error) {
             this.addDebugLog(`URL QR 처리 실패: ${error.message}`);
             this.showStatus(`첫 번째 QR 코드 처리 실패: ${error.message}`, 'error');
             
             // 실패 시 스캔 재개
             this.pauseScanning = false;
+            
+            // 에러 발생 시에도 중복 방지 데이터 초기화
+            this.clearDuplicatePreventionData();
         }
     }
 
@@ -691,8 +796,12 @@ class PaymentScanner {
             const serverUrl = paymentData.serverUrl;
             this.addDebugLog(`- 서버 URL: ${serverUrl} ${paymentData.serverUrl ? '(QR에서)' : '(기본값)'}`);
             
-            // 개인키 처리 - QR에 포함된 개인키 우선 사용
+            // 개인키 처리 - 저장된 개인키 사용 (QR에는 개인키 없음)
             let privateKey = this.walletPrivateKey;
+            this.addDebugLog(`🔍 DEBUG: 저장된 this.walletPrivateKey: ${this.walletPrivateKey?.substring(0, 10)}...`);
+            this.addDebugLog(`🔍 DEBUG: QR의 paymentData.privateKey: ${paymentData.privateKey?.substring(0, 10) || '없음'}...`);
+            
+            // QR에 개인키가 포함된 경우 (독립적 결제 모드 - 이전 호환성)
             if (paymentData.privateKey) {
                 this.addDebugLog('QR에 포함된 개인키 사용 (독립적 결제 모드)');
                 privateKey = paymentData.privateKey;
@@ -701,16 +810,16 @@ class PaymentScanner {
             
             // 개인키가 없으면 에러
             if (!privateKey) {
-                throw new Error('개인키가 없습니다. 첫 번째 QR 코드(지갑 정보)를 먼저 스캔하거나 독립적 결제 QR을 사용해주세요.');
+                throw new Error('개인키가 없습니다. 첫 번째 QR 코드(개인키 접속용)를 먼저 스캔해주세요.');
             }
             
-            this.addDebugLog(`- 개인키: ${privateKey.substring(0, 10)}... ${paymentData.privateKey ? '(QR 포함)' : '(저장된 값)'}`);
+            this.addDebugLog(`🔍 DEBUG: 최종 선택된 개인키: ${privateKey?.substring(0, 10)}... ${paymentData.privateKey ? '(QR 포함)' : '(저장된 개인키)'}`);
             
             // 결제 데이터에 개인키와 서버 URL 추가
             this.paymentData = {
                 ...paymentData,
                 serverUrl: serverUrl,
-                privateKey: privateKey
+                privateKey: privateKey // 저장된 개인키 또는 QR 개인키
             };
             
             this.addDebugLog(`설정된 결제 데이터: ${JSON.stringify(this.paymentData)}`);
@@ -727,10 +836,83 @@ class PaymentScanner {
             // 바로 결제 실행
             this.executePayment();
             
+            // QR 처리 완료 후 중복 방지 데이터 초기화
+            this.clearDuplicatePreventionData();
+            
         } catch (error) {
             this.addDebugLog(`결제 정보 처리 실패: ${error.message}`);
             this.showStatus('결제 정보 처리 실패: ' + error.message, 'error');
+            
+            // 에러 발생 시에도 중복 방지 데이터 초기화
+            this.clearDuplicatePreventionData();
         }
+    }
+
+    // 중복 방지 데이터 초기화 함수
+    clearDuplicatePreventionData() {
+        this.addDebugLog('중복 방지 데이터 초기화');
+        this.lastScannedQR = null;
+        this.lastScannedTime = 0;
+    }
+    
+    // 개인키 복구 함수 (필요시 언제든 호출 가능)
+    recoverPrivateKey() {
+        this.addDebugLog('🔄 개인키 복구 시도 시작');
+        
+        // 1. 이미 개인키가 있으면 복구 불필요
+        if (this.walletPrivateKey) {
+            this.addDebugLog('✅ 개인키가 이미 있음, 복구 불필요');
+            return true;
+        }
+        
+        // 2. sessionStorage에서 복구 시도
+        const sessionPrivateKey = sessionStorage.getItem('wallet_private_key');
+        const sessionFirstQR = sessionStorage.getItem('first_qr_scanned');
+        
+        if (sessionPrivateKey) {
+            this.addDebugLog(`🔄 sessionStorage에서 개인키 복구: ${sessionPrivateKey.substring(0, 10)}...`);
+            this.walletPrivateKey = sessionPrivateKey;
+            this.firstQRScanned = sessionFirstQR === 'true';
+            return true;
+        }
+        
+        // 3. URL 파라미터에서 복구 시도 (혹시 모름)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlPrivateKey = urlParams.get('pk');
+        
+        if (urlPrivateKey) {
+            this.addDebugLog(`🔄 URL 파라미터에서 개인키 복구: ${urlPrivateKey.substring(0, 10)}...`);
+            this.walletPrivateKey = urlPrivateKey;
+            this.firstQRScanned = true;
+            
+            // sessionStorage에도 저장
+            sessionStorage.setItem('wallet_private_key', urlPrivateKey);
+            sessionStorage.setItem('first_qr_scanned', 'true');
+            
+            return true;
+        }
+        
+        // 4. localStorage에서 복구 시도 (레거시)
+        const storedPrivateKey = localStorage.getItem('temp_wallet_private_key');
+        
+        if (storedPrivateKey) {
+            this.addDebugLog(`🔄 localStorage에서 개인키 복구: ${storedPrivateKey.substring(0, 10)}...`);
+            this.walletPrivateKey = storedPrivateKey;
+            this.firstQRScanned = true;
+            
+            // sessionStorage로 이전
+            sessionStorage.setItem('wallet_private_key', storedPrivateKey);
+            sessionStorage.setItem('first_qr_scanned', 'true');
+            
+            // localStorage 정리
+            localStorage.removeItem('temp_wallet_private_key');
+            localStorage.removeItem('temp_wallet_timestamp');
+            
+            return true;
+        }
+        
+        this.addDebugLog('❌ 개인키 복구 실패 - 모든 저장소에서 개인키를 찾을 수 없음');
+        return false;
     }
 
     // 첫 번째 QR: 개인키 처리
@@ -861,9 +1043,15 @@ class PaymentScanner {
             // 백엔드에 암호화된 결제 데이터 전송
             await this.executeEncryptedPayment(encryptedData);
             
+            // QR 처리 완료 후 중복 방지 데이터 초기화
+            this.clearDuplicatePreventionData();
+            
         } catch (error) {
             this.addDebugLog(`암호화된 결제 처리 실패: ${error.message}`);
             this.showStatus('암호화된 결제 처리 실패: ' + error.message, 'error');
+            
+            // 에러 발생 시에도 중복 방지 데이터 초기화
+            this.clearDuplicatePreventionData();
         }
     }
 
@@ -888,6 +1076,9 @@ class PaymentScanner {
         
         // 바로 결제 실행
         this.executePayment();
+        
+        // QR 처리 완료 후 중복 방지 데이터 초기화
+        this.clearDuplicatePreventionData();
     }
 
     // 암호화된 결제 실행
@@ -930,6 +1121,16 @@ class PaymentScanner {
             this.showStatus('결제 데이터가 없습니다.', 'error');
             return;
         }
+        
+        // 결제 실행 전 개인키 최종 확인 및 복구 시도
+        if (!this.walletPrivateKey) {
+            this.addDebugLog('💳 결제 실행 직전 개인키 없음 - 복구 시도');
+            if (!this.recoverPrivateKey()) {
+                this.showStatus('개인키를 찾을 수 없습니다. 개인키 접속용 QR을 먼저 스캔해주세요.', 'error');
+                return;
+            }
+            this.addDebugLog('💳 결제 실행 직전 개인키 복구 성공');
+        }
 
         try {
             // 1. 사용자 측에서 서명 생성
@@ -960,10 +1161,15 @@ class PaymentScanner {
         } = this.paymentData;
         
         this.addDebugLog(`서명 데이터: chainId=${chainId}, delegateAddress=${delegateAddress}`);
+        this.addDebugLog(`🔍 DEBUG: 실제 사용될 개인키: ${privateKey?.substring(0, 10)}...`);
+        this.addDebugLog(`🔍 DEBUG: this.walletPrivateKey: ${this.walletPrivateKey?.substring(0, 10)}...`);
+        this.addDebugLog(`🔍 DEBUG: paymentData 전체: ${JSON.stringify(this.paymentData)}`);
         
         // 기존 개인키로 wallet 객체 생성 (새로운 지갑이 아님)
         const wallet = new window.ethers.Wallet(privateKey);
         const authority = wallet.address; // 사용자 EOA 주소
+        
+        this.addDebugLog(`🔍 DEBUG: 생성된 authority 주소: ${authority}`);
         
         this.addDebugLog(`Authority EOA: ${authority}`);
         this.addDebugLog(`Delegation target: ${delegateAddress}`);
@@ -1335,16 +1541,17 @@ class PaymentScanner {
         document.getElementById('paymentProcessing').classList.add('hidden');
         document.getElementById('resultSection').classList.add('hidden');
         
-        // 데이터 초기화
+        // 데이터 초기화 (개인키는 보존)
         this.paymentData = null;
         this.wallet = null;
         this.provider = null;
         this.scanAttempts = 0;
         this.lastScanTime = null;
         this.pauseScanning = false;
-        this.walletPrivateKey = null;
+        // this.walletPrivateKey = null; // 개인키는 유지 (새 스캔을 위해)
         this.lastScannedQR = null;
-        this.firstQRScanned = false;
+        this.lastScannedTime = 0;
+        // this.firstQRScanned = false; // 개인키 스캔 상태도 유지
         
 
         
