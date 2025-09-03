@@ -604,7 +604,6 @@ export class AppService implements OnModuleInit {
       'amountWei',
       'chainId',
       'rpcUrl',
-      'timestamp',
       'privateKey', // QR 스캔된 개인키 필수
     ];
     for (const field of requiredFields) {
