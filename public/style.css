@@ -407,18 +407,21 @@ main {
     height: auto;
 }
 
-/* 비디오 컨테이너 */
+/* 비디오 컨테이너 - 모바일 최적화 */
 .video-container {
     position: relative;
     width: 100%;
-    max-width: 500px;
+    max-width: 420px;
     margin: 0 auto;
-    border-radius: 10px;
+    border-radius: 16px;
     overflow: hidden;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    box-shadow: 
+        0 12px 40px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 193, 7, 0.2);
     background: #000;
-    aspect-ratio: 4/3;
+    aspect-ratio: 1/1;
     min-height: 300px;
+    border: 2px solid rgba(255, 193, 7, 0.1);
 }
 
 #scanner-video {
@@ -427,29 +430,7 @@ main {
     display: block;
 }
 
-.scanner-overlay {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 200px;
-    height: 200px;
-    border: 2px solid #fff;
-    border-radius: 10px;
-    opacity: 0.8;
-}
-
-.scanner-overlay::before {
-    content: '';
-    position: absolute;
-    top: -10px;
-    left: -10px;
-    right: -10px;
-    bottom: -10px;
-    border: 2px solid #667eea;
-    border-radius: 15px;
-    animation: pulse 2s infinite;
-}
+/* scanner-overlay 제거 - 노란색 외각선만 유지 */
 
 @keyframes pulse {
     0% {
@@ -710,28 +691,34 @@ footer {
     .video-container {
         max-width: 100%;
         width: 100%;
-        height: 60vh;
-        min-height: 300px;
-        max-height: 500px;
+        height: min(70vh, 400px);
+        min-height: 280px;
+        max-height: 400px;
+        aspect-ratio: 1/1;
+        border-radius: 12px;
+        margin-bottom: 1rem;
     }
     
     #scanner-video {
         width: 100%;
         height: 100%;
         object-fit: cover;
+        border-radius: 12px;
     }
     
     .scan-frame {
-        width: min(250px, 70vw);
-        height: min(250px, 70vw);
+        width: min(240px, 60vw);
+        height: min(240px, 60vw);
         border-width: 3px;
+        border-radius: 20px;
     }
     
     .scan-instruction {
-        font-size: 16px;
-        padding: 10px 15px;
-        max-width: 90vw;
+        font-size: 15px;
+        padding: 12px 20px;
+        max-width: 85vw;
         word-wrap: break-word;
+        margin-top: 15px;
     }
     
     .btn {
@@ -767,31 +754,49 @@ footer {
 /* 매우 작은 화면 (모바일 세로 모드) */
 @media (max-width: 480px) {
     .video-container {
-        height: 50vh;
+        height: min(60vh, 350px);
         min-height: 250px;
+        max-height: 350px;
+        border-radius: 10px;
+    }
+    
+    #scanner-video {
+        border-radius: 10px;
     }
     
     .scan-frame {
-        width: min(200px, 60vw);
-        height: min(200px, 60vw);
+        width: min(200px, 55vw);
+        height: min(200px, 55vw);
+        border-width: 2.5px;
+        border-radius: 16px;
     }
     
     .scan-instruction {
         font-size: 14px;
-        padding: 8px 12px;
+        padding: 10px 16px;
+        max-width: 90vw;
+        margin-top: 12px;
     }
 }
 
 /* 가로 모드 최적화 */
 @media (max-height: 600px) and (orientation: landscape) {
     .video-container {
-        max-width: 50vw;
-        height: 80vh;
+        max-width: min(400px, 45vw);
+        height: min(75vh, 300px);
+        aspect-ratio: 1/1;
     }
     
     .scan-frame {
-        width: min(180px, 40vw);
-        height: min(180px, 40vw);
+        width: min(160px, 35vw);
+        height: min(160px, 35vw);
+        border-width: 2px;
+    }
+    
+    .scan-instruction {
+        font-size: 13px;
+        padding: 8px 14px;
+        margin-top: 10px;
     }
 }
 
@@ -820,39 +825,52 @@ footer {
 }
 
 .scan-frame {
-    width: 250px;
-    height: 250px;
+    width: min(280px, 70vw);
+    height: min(280px, 70vw);
     border: 3px solid #FFC107;
-    border-radius: 20px;
-    box-shadow: 0 0 20px rgba(255, 193, 7, 0.6);
+    border-radius: 24px;
+    box-shadow: 
+        0 0 20px rgba(255, 193, 7, 0.6),
+        inset 0 0 20px rgba(255, 193, 7, 0.1);
     animation: scanPulse 2s infinite;
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
 }
 
 .scan-instruction {
     text-align: center;
-    margin-top: 15px;
+    margin-top: 20px;
     /* iOS Safari fallback */
-    background-color: rgba(26, 26, 26, 0.9);
-    background: rgba(26, 26, 26, 0.9);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background-color: rgba(26, 26, 26, 0.95);
+    background: rgba(26, 26, 26, 0.95);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     color: #FFC107;
-    padding: 12px 20px;
-    border-radius: 25px;
-    font-size: 14px;
+    padding: 14px 24px;
+    border-radius: 30px;
+    font-size: 16px;
     font-weight: 600;
-    border: 1px solid rgba(255, 193, 7, 0.3);
+    border: 2px solid rgba(255, 193, 7, 0.4);
     letter-spacing: 0.02em;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    max-width: 90vw;
+    word-wrap: break-word;
 }
 
 @keyframes scanPulse {
     0%, 100% {
         border-color: #FFC107;
-        box-shadow: 0 0 20px rgba(255, 193, 7, 0.6);
+        box-shadow: 
+            0 0 20px rgba(255, 193, 7, 0.6),
+            inset 0 0 20px rgba(255, 193, 7, 0.1);
+        transform: scale(1);
     }
     50% {
         border-color: #FFD54F;
-        box-shadow: 0 0 30px rgba(255, 193, 7, 0.8);
+        box-shadow: 
+            0 0 35px rgba(255, 193, 7, 0.8),
+            inset 0 0 25px rgba(255, 193, 7, 0.15);
+        transform: scale(1.02);
     }
 }
 
