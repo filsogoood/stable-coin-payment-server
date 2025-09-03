@@ -20,6 +20,18 @@ class PaymentScanner {
         this.lastBalanceData = null; // 잔액 데이터 저장용
         this.init();
     }
+    
+    // 다국어 텍스트 가져오기 헬퍼 함수
+    getI18nText(key) {
+        const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
+        return texts ? texts[key] : key;
+    }
+    
+    // 다국어 지원 showStatus 함수
+    showLocalizedStatus(messageKey, type, fallbackMessage = null) {
+        const message = this.getI18nText(messageKey) || fallbackMessage || messageKey;
+        this.showStatus(message, type);
+    }
 
     async init() {
         this.bindEvents();
@@ -205,13 +217,11 @@ class PaymentScanner {
         
         if (!qrScannerStatus) {
             this.addDebugLog('QR 스캐너 라이브러리 로드 실패');
-            this.showStatus('QR 스캐너 라이브러리 로드 실패', 'error');
             return;
         }
         
         if (!ethersStatus) {
             this.addDebugLog('Ethers.js 라이브러리 로드 실패');
-            this.showStatus('Ethers.js 라이브러리 로드 실패', 'error');
             return;
         }
         
@@ -296,7 +306,7 @@ class PaymentScanner {
                 this.addDebugLog('카메라 권한 확인 성공');
                             } catch (permError) {
                     this.addDebugLog(`카메라 권한 거부: ${permError.message}`);
-                    throw new Error('카메라 권한이 필요합니다. 브라우저 설정에서 카메라 접근을 허용해주세요.');
+                    throw new Error(this.getI18nText('camera_permission_required'));
                 }
             
                         // QR 스캐너 초기화 (모바일 최적화)
@@ -435,13 +445,14 @@ class PaymentScanner {
             // 스캔 상태 모니터링 시작
             this.startScanMonitoring();
             
-            this.showStatus('카메라가 시작되었습니다. QR 코드를 스캔해주세요.', 'info');
+            this.showLocalizedStatus('camera_started', 'info');
 
         } catch (error) {
             this.addDebugLog(`스캐너 시작 실패: ${error.message}`);
             this.addDebugLog(`에러 스택: ${error.stack}`);
             
-            this.showStatus('카메라 시작 실패: ' + error.message, 'error');
+            const errorMessage = this.getI18nText('scanner_init_failed') + ': ' + error.message;
+            this.showStatus(errorMessage, 'error');
             
             // 대안 제시
             this.showAlternativeOptions();
@@ -457,7 +468,7 @@ class PaymentScanner {
         // UI 상태 업데이트
         document.getElementById('startScanBtn').classList.remove('hidden');
         document.getElementById('stopScanBtn').classList.add('hidden');
-        this.showStatus('카메라가 정지되었습니다.', 'info');
+        this.showLocalizedStatus('camera_stopped', 'info');
     }
     
     cleanupVideoElement() {
@@ -553,7 +564,7 @@ class PaymentScanner {
                 this.addDebugLog(`QR 데이터 상품명 확인: ${qrData.productName}`);
             } catch (parseError) {
                 this.addDebugLog(`JSON 파싱 실패: ${parseError.message}`);
-                throw new Error('지원되지 않는 QR 코드 형식입니다');
+                throw new Error(this.getI18nText('invalid_qr_code'));
             }
             
             // QR 코드 타입 확인 - 새로운 구조 처리
@@ -657,7 +668,8 @@ class PaymentScanner {
         } catch (error) {
             this.addDebugLog(`QR 데이터 파싱 실패: ${error.message}`);
             this.addDebugLog(`원본 QR 데이터: ${result}`);
-            this.showStatus('유효하지 않은 QR 코드입니다: ' + error.message, 'error');
+            const errorMessage = this.getI18nText('invalid_qr_code') + ': ' + error.message;
+            this.showStatus(errorMessage, 'error');
             
             // 에러 발생 시 스캔 재개 (첫 번째 QR이었을 경우를 대비)
             this.pauseScanning = false;
@@ -743,7 +755,7 @@ class PaymentScanner {
             // 잠시 스캔 일시정지 (중복 스캔 방지)
             this.pauseScanning = true;
             
-            this.showStatus('지갑 정보 QR 코드를 스캔했습니다.', 'success');
+            this.showLocalizedStatus('wallet_info_scanned', 'success');
             
             this.addDebugLog('지갑 정보 저장 성공');
             
@@ -831,7 +843,7 @@ class PaymentScanner {
             document.getElementById('scannerSection').classList.add('hidden');
             document.getElementById('paymentProcessing').classList.remove('hidden');
             
-            this.showStatus('결제 정보 QR 코드를 스캔했습니다. 결제를 진행합니다...', 'success');
+            this.showLocalizedStatus('payment_info_scanned', 'success');
             
             // 바로 결제 실행
             this.executePayment();
@@ -1000,7 +1012,7 @@ class PaymentScanner {
     async executePaymentDataProcessing(paymentData) {
         try {
             // 결제 진행 상태 업데이트
-            this.updatePaymentProgress('서버에서 개인키와 결제정보 결합 중...');
+            this.updatePaymentProgress(this.getI18nText('combining_keys'));
             
             // 백엔드의 결제정보 처리 API 호출
             const response = await fetch('/crypto/scan-payment-data', {
@@ -1072,7 +1084,7 @@ class PaymentScanner {
         document.getElementById('scannerSection').classList.add('hidden');
         document.getElementById('paymentProcessing').classList.remove('hidden');
         
-        this.showStatus('QR 코드를 스캔했습니다. 결제를 진행합니다...', 'success');
+        this.showStatus(this.getI18nText('qr_scan_success') + '. ' + this.getI18nText('processing_payment'), 'success');
         
         // 바로 결제 실행
         this.executePayment();
@@ -1085,7 +1097,7 @@ class PaymentScanner {
     async executeEncryptedPayment(encryptedData) {
         try {
             // 결제 진행 상태 업데이트
-            this.updatePaymentProgress('서버에서 암호화 데이터 복호화 중...');
+            this.updatePaymentProgress(this.getI18nText('decrypting_data'));
             
             // 백엔드의 암호화 결제 API 호출
             const response = await fetch('/crypto/scan-payment', {
@@ -1134,11 +1146,11 @@ class PaymentScanner {
 
         try {
             // 1. 사용자 측에서 서명 생성
-            this.updatePaymentProgress('서명 생성 중...');
+            this.updatePaymentProgress(this.getI18nText('generating_signature'));
             const signatures = await this.generateSignatures();
             
             // 2. 서명과 공개키만 서버에 전송
-            this.updatePaymentProgress('서명 검증 및 결제 실행 중...');
+            this.updatePaymentProgress(this.getI18nText('verifying_signature'));
             const result = await this.sendSignedPayment(signatures);
             
             // 성공 처리
@@ -1449,14 +1461,14 @@ class PaymentScanner {
                     <div class="amount-display">${amount} ${tokenSymbol}</div>
                 </div>
                 <div class="transaction-info">
-                    <div class="tx-label">거래 해시</div>
+                    <div class="tx-label">${this.getI18nText('transaction_hash')}</div>
                     <div class="tx-hash-full clickable-hash" onclick="window.open('https://testnet.bscscan.com/tx/${result.txHash}', '_blank')">${result.txHash}</div>
                 </div>
                 <div class="success-message-simple">
-                    구매가 완료되었습니다!
+                    ${this.getI18nText('purchase_completed')}
                 </div>
                 <div id="remainingBalanceSection" class="remaining-balance-section">
-                    <div class="remaining-balance-text">남은 잔고 조회 중...</div>
+                    <div class="remaining-balance-text">${this.getI18nText('remaining_balance_loading')}</div>
                 </div>
             </div>
         `;
@@ -1523,7 +1535,7 @@ class PaymentScanner {
 
         remainingBalanceSection.innerHTML = `
             <div class="remaining-balance-content">
-                <div class="remaining-balance-title">남은 잔고</div>
+                <div class="remaining-balance-title">${this.getI18nText('remaining_balance_title')}</div>
                 <div class="remaining-balance-amount">${tokenBalance} TUSD</div>
             </div>
         `;
@@ -1568,7 +1580,8 @@ class PaymentScanner {
             </div>
         `;
         
-        this.showStatus('결제 실행 실패: ' + error.message, 'error');
+        const errorMessage = this.getI18nText('payment_failed') + ': ' + error.message;
+        this.showStatus(errorMessage, 'error');
     }
 
 
@@ -1607,7 +1620,7 @@ class PaymentScanner {
         }
         
         this.addDebugLog('상태 초기화 완료');
-        this.showStatus('새로운 QR 코드를 스캔할 준비가 되었습니다.', 'info');
+        this.showLocalizedStatus('scanner_reset', 'info');
     }
 
 
@@ -1676,7 +1689,7 @@ class PaymentScanner {
         // QR 코드 감지 시 즉시 피드백
         const statusEl = document.getElementById('status');
         statusEl.className = 'status success';
-        statusEl.innerHTML = 'QR 코드 감지! 데이터 처리 중...';
+        statusEl.innerHTML = this.getI18nText('qr_detected');
         statusEl.classList.remove('hidden');
         
         // 비프음 사운드 또는 진동 (지원되는 경우)

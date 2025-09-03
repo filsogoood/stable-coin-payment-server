@@ -66,7 +66,14 @@
                 payment_progress_text: "안전하게 결제를 처리하고 있습니다...",
                 payment_complete: "결제 완료",
                 new_payment: "새 결제 진행",
-                scan_payment_qr: "결제 QR 코드를 스캔해주세요"
+                scan_payment_qr: "결제 QR 코드를 스캔해주세요",
+                wallet_private_key_found: "개인키를 발견했습니다",
+                wallet_private_key_restored: "개인키를 복원했습니다",
+                balance_loading: "잔고 조회 중...",
+                balance_display_error: "잔고 표시 중 오류가 발생했습니다",
+                wallet_info_updated: "지갑 정보가 업데이트되었습니다",
+                language_changed: "언어가 변경되었습니다",
+                loading: "로딩 중..."
             },
             en: {
                 app_title: "STABLE CUBE Payment",
@@ -77,7 +84,7 @@
                 balance: "Balance",
                 balance_query_failed: "Balance query failed",
                 payment_qr_scan: "Scan Payment QR",
-                wallet_info_set: "Wallet information has been set. Check your balance and proceed with payment.",
+                wallet_info_set: "Check your balance and proceed with payment.",
                 qr_scanner: "QR Scanner",
                 scan_instruction: "Please scan the QR code",
                 camera_start: "Start Camera",
@@ -86,7 +93,14 @@
                 payment_progress_text: "Securely processing your payment...",
                 payment_complete: "Payment Complete",
                 new_payment: "New Payment",
-                scan_payment_qr: "Please scan the payment QR code"
+                scan_payment_qr: "Please scan the payment QR code",
+                wallet_private_key_found: "Private key found",
+                wallet_private_key_restored: "Private key restored",
+                balance_loading: "Loading balance...",
+                balance_display_error: "Error occurred while displaying balance",
+                wallet_info_updated: "Wallet information updated",
+                language_changed: "Language changed",
+                loading: "Loading..."
             }
         };
 
@@ -180,6 +194,28 @@
                 const balanceSection = document.getElementById('balanceSection');
                 if (balanceSection && !balanceSection.classList.contains('hidden') && this.lastBalanceData) {
                     this.displayBalance(this.lastBalanceData);
+                }
+                
+                // 현재 표시중인 상태 메시지 업데이트 (언어 변경 적용)
+                this.updateCurrentStatusMessage();
+            }
+
+            // 현재 표시중인 상태 메시지 업데이트 (언어 변경 시)
+            updateCurrentStatusMessage() {
+                const statusDiv = document.getElementById('status');
+                if (!statusDiv || statusDiv.classList.contains('hidden')) return;
+                
+                // 현재 상태에 따른 적절한 메시지 업데이트
+                const texts = i18nTexts[this.currentLang];
+                const currentClass = statusDiv.className;
+                
+                // 특정 상황에 맞는 메시지로 업데이트
+                if (this.walletPrivateKey && !this.lastBalanceData) {
+                    // 개인키는 있지만 잔액 조회가 안된 상태
+                    this.showStatus('balance_loading', 'info');
+                } else if (this.walletPrivateKey && this.lastBalanceData) {
+                    // 모든 정보가 준비된 상태
+                    this.showStatus('wallet_info_updated', 'success');
                 }
             }
 
@@ -308,7 +344,7 @@
                 } catch (error) {
                     console.error('잔고 조회 실패:', error);
                     const texts = i18nTexts[this.currentLang];
-                    this.showStatus(`${texts.balance_query_failed}: ${error.message}`, 'error');
+                    this.showDirectStatus(`${texts.balance_query_failed}: ${error.message}`, 'error');
                     
                     // 잔고 섹션 숨기기
                     const balanceSection = document.getElementById('balanceSection');
@@ -336,7 +372,26 @@
                 `;
             }
 
-            showStatus(message, type) {
+            showStatus(messageKey, type, fallbackMessage = null) {
+                const statusDiv = document.getElementById('status');
+                if (!statusDiv) return;
+
+                const texts = i18nTexts[this.currentLang];
+                // messageKey가 다국어 키인지 확인, 없으면 fallback 또는 원본 메시지 사용
+                const message = texts[messageKey] || fallbackMessage || messageKey;
+                
+                statusDiv.textContent = message;
+                statusDiv.className = `status ${type}`;
+                statusDiv.classList.remove('hidden');
+
+                // 5초 후 자동 숨김
+                setTimeout(() => {
+                    statusDiv.classList.add('hidden');
+                }, 5000);
+            }
+            
+            // 기존 호환성을 위한 함수 (원본 메시지를 직접 표시)
+            showDirectStatus(message, type) {
                 const statusDiv = document.getElementById('status');
                 if (!statusDiv) return;
 

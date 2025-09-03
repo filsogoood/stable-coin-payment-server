@@ -96,7 +96,31 @@
                 payment_complete: "결제 완료",
                 new_payment: "새 결제 진행",
 
-                scan_payment_qr: "결제 QR 코드를 스캔해주세요"
+                scan_payment_qr: "결제 QR 코드를 스캔해주세요",
+                
+                // 추가 메시지들
+                camera_started: "카메라가 시작되었습니다. QR 코드를 스캔해주세요.",
+                camera_stopped: "카메라가 정지되었습니다.",
+                scanner_init_failed: "스캐너 초기화 실패",
+                camera_permission_required: "카메라 권한이 필요합니다. 브라우저 설정에서 카메라 접근을 허용해주세요.",
+                qr_detected: "QR 코드 감지! 데이터 처리 중...",
+                invalid_qr_code: "유효하지 않은 QR 코드입니다",
+                qr_scan_success: "QR 코드를 스캔했습니다",
+                processing_payment: "결제를 진행합니다...",
+                payment_failed: "결제 실행 실패",
+                scanner_reset: "새로운 QR 코드를 스캔할 준비가 되었습니다.",
+                wallet_info_scanned: "지갑 정보 QR 코드를 스캔했습니다.",
+                payment_info_scanned: "결제 정보 QR 코드를 스캔했습니다. 결제를 진행합니다...",
+                purchase_completed: "구매가 완료되었습니다!",
+                transaction_hash: "거래 해시",
+                remaining_balance_loading: "남은 잔고 조회 중...",
+                remaining_balance_title: "남은 잔고",
+                // 결제 진행 단계 메시지들
+                generating_signature: "서명 생성 중...",
+                verifying_signature: "서명 검증 및 결제 실행 중...",
+                payment_executing: "결제 실행 중...",
+                combining_keys: "서버에서 개인키와 결제정보 결합 중...",
+                decrypting_data: "서버에서 암호화 데이터 복호화 중..."
             },
             en: {
                 qr_scanner: "QR Scanner",
@@ -109,7 +133,31 @@
                 payment_complete: "Payment Complete",
                 new_payment: "New Payment",
 
-                scan_payment_qr: "Please scan the payment QR code"
+                scan_payment_qr: "Please scan the payment QR code",
+                
+                // 추가 메시지들
+                camera_started: "Camera started. Please scan the QR code.",
+                camera_stopped: "Camera stopped.",
+                scanner_init_failed: "Scanner initialization failed",
+                camera_permission_required: "Camera permission is required. Please allow camera access in browser settings.",
+                qr_detected: "QR code detected! Processing data...",
+                invalid_qr_code: "Invalid QR code",
+                qr_scan_success: "QR code scanned successfully",
+                processing_payment: "Processing payment...",
+                payment_failed: "Payment execution failed",
+                scanner_reset: "Ready to scan new QR code.",
+                wallet_info_scanned: "Wallet information QR code scanned.",
+                payment_info_scanned: "Payment information QR code scanned. Processing payment...",
+                purchase_completed: "Purchase completed!",
+                transaction_hash: "Transaction Hash",
+                remaining_balance_loading: "Loading remaining balance...",
+                remaining_balance_title: "Remaining Balance",
+                // 결제 진행 단계 메시지들
+                generating_signature: "Generating signature...",
+                verifying_signature: "Verifying signature and executing payment...",
+                payment_executing: "Executing payment...",
+                combining_keys: "Combining private key and payment information on server...",
+                decrypting_data: "Decrypting encrypted data on server..."
             }
         };
 
@@ -173,7 +221,7 @@
             applyScanLanguage(newLang);
             updateScanLanguageButton(newLang);
             
-            // PaymentScanner 인스턴스에 언어 변경 알림 및 잔액 재렌더링
+            // PaymentScanner 인스턴스에 언어 변경 알림 및 관련 UI 업데이트
             if (window.paymentScannerInstance) {
                 window.paymentScannerInstance.currentLang = newLang;
                 
@@ -181,11 +229,62 @@
                 if (window.paymentScannerInstance.lastBalanceData) {
                     window.paymentScannerInstance.displayBalance(window.paymentScannerInstance.lastBalanceData);
                 }
+                
+                // 현재 표시되고 있는 동적 메시지들 업데이트
+                updateScanPageDynamicMessages(newLang);
+            }
+        }
+
+        // 언어 변경 시 동적 메시지들 업데이트
+        function updateScanPageDynamicMessages(lang) {
+            const texts = scanPageI18n[lang];
+            if (!texts) return;
+            
+            // 현재 표시중인 상태 메시지 업데이트
+            const statusEl = document.getElementById('status');
+            if (statusEl && !statusEl.classList.contains('hidden')) {
+                const currentMessage = statusEl.textContent;
+                
+                // 스캔 가이드 메시지 업데이트
+                const scanGuide = document.querySelector('.scan-instruction');
+                if (scanGuide) {
+                    const currentGuideText = scanGuide.textContent;
+                    // 기본 스캔 메시지인 경우
+                    if (currentGuideText.includes('QR') || currentGuideText.includes('스캔') || currentGuideText.includes('scan')) {
+                        // 첫 번째 QR이 완료된 경우와 그렇지 않은 경우 구분
+                        if (window.paymentScannerInstance && window.paymentScannerInstance.firstQRScanned) {
+                            scanGuide.textContent = texts.scan_payment_qr;
+                            scanGuide.style.color = '#FFC107';
+                        } else {
+                            scanGuide.textContent = texts.scan_instruction;
+                            scanGuide.style.color = '';
+                        }
+                    }
+                }
+                
+                // 일반적인 상태 메시지들 업데이트
+                if (currentMessage.includes('카메라') || currentMessage.includes('camera')) {
+                    if (currentMessage.includes('시작') || currentMessage.includes('start')) {
+                        statusEl.textContent = '카메라가 시작되었습니다. ' + texts.scan_instruction;
+                    } else if (currentMessage.includes('정지') || currentMessage.includes('stop')) {
+                        statusEl.textContent = lang === 'ko' ? '카메라가 정지되었습니다.' : 'Camera stopped.';
+                    }
+                } else if (currentMessage.includes('스캔') || currentMessage.includes('scan')) {
+                    statusEl.textContent = texts.scan_instruction;
+                }
+            }
+            
+            // 결제 완료 섹션의 메시지들도 필요시 업데이트
+            const resultSection = document.getElementById('resultSection');
+            if (resultSection && !resultSection.classList.contains('hidden')) {
+                // 결제 완료 관련 메시지들도 언어에 맞게 업데이트 가능
+                // 필요한 경우 여기에 추가 로직 구현
             }
         }
 
         // 전역으로 노출
         window.scanPageI18n = scanPageI18n;
+        window.updateScanPageDynamicMessages = updateScanPageDynamicMessages;
 
         // 페이지 로드 시 언어 초기화
         document.addEventListener('DOMContentLoaded', () => {
