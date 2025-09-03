@@ -1368,12 +1368,12 @@ export class AppService implements OnModuleInit {
         address,
         ethBalance: {
           raw: ethBal.toString(),
-          formatted: ethers.formatEther(ethBal),
+          formatted: parseFloat(ethers.formatEther(ethBal)).toFixed(3),
           symbol: 'ETH',
         },
         tokenBalance: {
           raw: rawBal.toString(),
-          formatted: ethers.formatUnits(rawBal, decimals),
+          formatted: parseFloat(ethers.formatUnits(rawBal, decimals)).toFixed(3),
           symbol: symbol,
           name: name,
           address: tokenAddress,
@@ -1515,6 +1515,38 @@ export class AppService implements OnModuleInit {
         signature712: transfer.signature,
         authorization: authorization
       });
+      
+      // 결제 성공 시 영수증 인쇄 요청
+      if (paymentResult.status === 'ok') {
+        this.logger.log('[SIGNED_PAYMENT] 결제 성공, 영수증 인쇄 요청 시작');
+        
+        try {
+          // 결제 데이터에서 금액과 토큰 정보 추출
+          const amount = transfer.transfer?.amount || '0';
+          const token = transfer.transfer?.token || 'UNKNOWN';
+          const toAddress = transfer.transfer?.to || 'UNKNOWN';
+          
+          const receiptData = {
+            txHash: paymentResult.txHash,
+            amount: amount,
+            token: token,
+            from: authority, // 결제자 주소
+            to: toAddress, // 수취인 주소  
+            timestamp: new Date().toISOString(),
+            status: 'success',
+            productName: productName || product || '기타상품', // 상품명
+          };
+          
+          await this.printReceipt(receiptData);
+          this.logger.log('[SIGNED_PAYMENT] 영수증 인쇄 요청 완료');
+        } catch (printError: any) {
+          this.logger.warn('[SIGNED_PAYMENT] 영수증 인쇄 실패:', {
+            error: printError.message,
+            txHash: paymentResult.txHash
+          });
+          // 영수증 인쇄 실패해도 결제 성공은 유지
+        }
+      }
       
       // 상품명 정보를 응답에 추가
       if (productName || product) {

@@ -1407,7 +1407,7 @@ class PaymentScanner {
                 this.addDebugLog(`금액 변환 시도: ${amountWei}`);
                 // Wei에서 Ether로 변환 (18 decimals)
                 const ethAmount = Number(amountWei) / Math.pow(10, 18);
-                const formatted = ethAmount.toFixed(6).replace(/\.?0+$/, ''); // 소수점 뒤 불필요한 0 제거
+                const formatted = ethAmount.toFixed(3); // 소수점 3자리까지 표시
                 this.addDebugLog(`금액 변환 결과: ${formatted}`);
                 return formatted;
             } catch (e) {
@@ -1518,8 +1518,8 @@ class PaymentScanner {
         const remainingBalanceSection = document.getElementById('remainingBalanceSection');
         if (!remainingBalanceSection) return;
 
-        // 토큰 잔액을 TUSD 단위로 표시
-        const tokenBalance = parseFloat(balance.tokenBalance.formatted).toFixed(2);
+        // 토큰 잔액을 TUSD 단위로 표시 (소숫점 3자리)
+        const tokenBalance = parseFloat(balance.tokenBalance.formatted).toFixed(3);
 
         remainingBalanceSection.innerHTML = `
             <div class="remaining-balance-content">
