@@ -324,17 +324,11 @@
 
                 const texts = i18nTexts[this.currentLang];
                 
-                // 주소 축약 함수
-                const shortenAddress = (address) => {
-                    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-                };
-
                 balanceInfo.innerHTML = `
                     <div class="balance-item">
                         <span class="balance-label">${texts.wallet_address}:</span>
-                        <span class="balance-value">${shortenAddress(balance.address)}</span>
+                        <div class="wallet-address-full" onclick="window.open('https://testnet.bscscan.com/address/${balance.address}', '_blank')">${balance.address}</div>
                     </div>
-                    <div class="wallet-address">${balance.address}</div>
                     <div class="balance-item">
                         <span class="balance-label">${balance.tokenBalance.symbol} ${texts.balance}:</span>
                         <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(2)} ${balance.tokenBalance.symbol}</span>

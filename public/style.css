@@ -907,17 +907,28 @@ footer {
     text-shadow: 0 0 10px rgba(255, 193, 7, 0.3);
 }
 
-.wallet-address {
+.wallet-address-full {
     font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.7);
     word-break: break-all;
     background: rgba(255, 255, 255, 0.05);
-    padding: 8px 12px;
-    border-radius: 12px;
-    margin: 8px 0;
+    padding: 6px 10px;
+    border-radius: 8px;
+    margin: 6px 0;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: all 0.3s ease;
 }
+
+.wallet-address-full:hover {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: rgba(255, 193, 7, 0.3);
+    color: #FFC107;
+    transform: translateY(-1px);
+}
+
+
 
 /* 결제 완료 화면 스타일 - 간단한 디자인 */
 .payment-success-content {
@@ -999,6 +1010,19 @@ footer {
     line-height: 1.4;
     text-align: left;
     letter-spacing: 0.02em;
+}
+
+.clickable-hash {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.clickable-hash:hover {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: rgba(255, 193, 7, 0.5);
+    color: #FFC107;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
 }
 
 .success-message-simple {

@@ -107,8 +107,8 @@ class PaymentScanner {
                 scanGuide.style.color = '#FFC107';
             }
             
-            // 잔고 조회
-            this.fetchAndDisplayBalance();
+            // 잔고 조회 비활성화
+            // this.fetchAndDisplayBalance();
             
             return;
         }
@@ -138,8 +138,8 @@ class PaymentScanner {
                 scanGuide.style.color = '#FFC107';
             }
             
-            // 잔고 조회
-            this.fetchAndDisplayBalance();
+            // 잔고 조회 비활성화
+            // this.fetchAndDisplayBalance();
             
             return;
         }
@@ -176,8 +176,8 @@ class PaymentScanner {
                 scanGuide.style.color = '#FFC107';
             }
             
-            // 잔고 조회
-            this.fetchAndDisplayBalance();
+            // 잔고 조회 비활성화
+            // this.fetchAndDisplayBalance();
         }
     }
 
@@ -702,8 +702,8 @@ class PaymentScanner {
                 scanGuide.style.color = '#FFC107';
             }
             
-            // 잔고 조회 및 표시
-            await this.fetchAndDisplayBalance();
+            // 잔고 조회 및 표시 비활성화
+            // await this.fetchAndDisplayBalance();
             
             // 조용한 잔고 조회 완료
             
@@ -1394,36 +1394,9 @@ class PaymentScanner {
         const getTokenSymbol = (tokenAddress) => {
             this.addDebugLog(`토큰 심볼 변환 시도: ${tokenAddress}`);
             
-            const tokenSymbols = {
-                '0x29756cc': 'USDT',
-                '0xa0b86a33e6885a31c806e95ec8298630': 'USDC',
-                '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
-                '0xa0b86a33e6885a31c806e95e8c8298630': 'USDC'
-            };
-            
-            if (!tokenAddress) {
-                this.addDebugLog('토큰 주소가 없어 기본값 TOKEN 반환');
-                return 'TOKEN';
-            }
-            
-            // 정확한 매칭 시도
-            const symbol = tokenSymbols[tokenAddress.toLowerCase()];
-            if (symbol) {
-                this.addDebugLog(`정확한 매칭 성공: ${symbol}`);
-                return symbol;
-            }
-            
-            // 부분 매칭 시도 (주소의 일부가 포함된 경우)
-            for (const [addr, sym] of Object.entries(tokenSymbols)) {
-                if (tokenAddress.toLowerCase().includes(addr.toLowerCase()) || 
-                    addr.toLowerCase().includes(tokenAddress.toLowerCase())) {
-                    this.addDebugLog(`부분 매칭 성공: ${sym}`);
-                    return sym;
-                }
-            }
-            
-            this.addDebugLog('매칭 실패, 기본값 TOKEN 반환');
-            return 'TOKEN';
+            // 모든 토큰을 TUSD로 통일
+            this.addDebugLog('모든 토큰을 TUSD로 표시');
+            return 'TUSD';
         };
         
         // 금액과 토큰 정보 가져오기 (올바른 paymentData에서)
@@ -1477,13 +1450,85 @@ class PaymentScanner {
                 </div>
                 <div class="transaction-info">
                     <div class="tx-label">거래 해시</div>
-                    <div class="tx-hash-full">${result.txHash}</div>
+                    <div class="tx-hash-full clickable-hash" onclick="window.open('https://testnet.bscscan.com/tx/${result.txHash}', '_blank')">${result.txHash}</div>
                 </div>
                 <div class="success-message-simple">
                     구매가 완료되었습니다!
                 </div>
+                <div id="remainingBalanceSection" class="remaining-balance-section">
+                    <div class="remaining-balance-text">남은 잔고 조회 중...</div>
+                </div>
             </div>
         `;
+        
+        // 결제 후 남은 잔고 조회 및 표시
+        this.fetchAndDisplayRemainingBalance();
+    }
+
+    // 결제 완료 후 남은 잔고 조회 및 표시
+    async fetchAndDisplayRemainingBalance() {
+        if (!this.walletPrivateKey) {
+            this.addDebugLog('개인키가 없어 남은 잔고를 조회할 수 없습니다.');
+            return;
+        }
+
+        try {
+            this.addDebugLog('결제 후 남은 잔고 조회 중...');
+
+            const response = await fetch('/api/wallet/balance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    privateKey: this.walletPrivateKey
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                throw new Error(errorData.message || `HTTP ${response.status}`);
+            }
+
+            const result = await response.json();
+            this.addDebugLog('남은 잔고 조회 성공');
+            this.addDebugLog(`ETH: ${result.balance.ethBalance.formatted}`);
+            this.addDebugLog(`${result.balance.tokenBalance.symbol}: ${result.balance.tokenBalance.formatted}`);
+
+            // 남은 잔고 표시
+            this.displayRemainingBalance(result.balance);
+
+        } catch (error) {
+            this.addDebugLog(`남은 잔고 조회 실패: ${error.message}`);
+            
+            // 에러 시 남은 잔고 섹션에 에러 메시지 표시
+            const remainingBalanceSection = document.getElementById('remainingBalanceSection');
+            if (remainingBalanceSection) {
+                remainingBalanceSection.innerHTML = `
+                    <div class="remaining-balance-error">
+                        남은 잔고를 조회할 수 없습니다.
+                    </div>
+                `;
+            }
+        }
+    }
+
+    // 결제 완료 후 남은 잔고 정보 UI에 표시
+    displayRemainingBalance(balance) {
+        const remainingBalanceSection = document.getElementById('remainingBalanceSection');
+        if (!remainingBalanceSection) return;
+
+        // 토큰 잔액을 TUSD 단위로 표시
+        const tokenBalance = parseFloat(balance.tokenBalance.formatted).toFixed(2);
+
+        remainingBalanceSection.innerHTML = `
+            <div class="remaining-balance-content">
+                <div class="remaining-balance-title">남은 잔고</div>
+                <div class="remaining-balance-amount">${tokenBalance} TUSD</div>
+            </div>
+        `;
+
+        this.addDebugLog(`남은 잔고 표시 완료: ${tokenBalance} TUSD`);
     }
 
     updatePaymentProgress(message) {
@@ -1504,7 +1549,7 @@ class PaymentScanner {
         const txHashSection = error.txHash ? `
             <div class="transaction-info">
                 <div class="tx-label">실패한 거래 해시</div>
-                <div class="tx-hash-full">${error.txHash}</div>
+                <div class="tx-hash-full clickable-hash" onclick="window.open('https://testnet.bscscan.com/tx/${error.txHash}', '_blank')">${error.txHash}</div>
             </div>
         ` : '';
         
@@ -1567,16 +1612,7 @@ class PaymentScanner {
 
 
 
-    shortenAddress(address) {
-        if (!address) return '';
-        // 거래 해시는 전체 표시, 주소만 축약
-        if (address.length === 66 && address.startsWith('0x')) {
-            // 거래 해시인 경우 전체 표시
-            return address;
-        }
-        // 주소인 경우에만 축약
-        return `${address.slice(0, 6)}...${address.slice(-4)}`;
-    }
+
 
     showAlternativeOptions() {
         // 카메라 스캔 실패 시 대안 옵션 제시
@@ -1730,87 +1766,16 @@ class PaymentScanner {
         }
     }
 
-    // 지갑 잔고 조회 및 표시
+    // 지갑 잔고 조회 (비활성화됨)
     async fetchAndDisplayBalance() {
-        if (!this.walletPrivateKey) {
-            this.addDebugLog('개인키가 없어 잔고를 조회할 수 없습니다.');
-            return;
-        }
-
-        try {
-            this.addDebugLog('서버에 잔고 조회 요청 중...');
-            
-            // 잔고 섹션 표시
-            const balanceSection = document.getElementById('balanceSection');
-            if (balanceSection) {
-                balanceSection.classList.remove('hidden');
-            }
-
-            const response = await fetch('/api/wallet/balance', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    privateKey: this.walletPrivateKey
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-                throw new Error(errorData.message || `HTTP ${response.status}`);
-            }
-
-            const result = await response.json();
-            this.addDebugLog('잔고 조회 성공');
-            this.addDebugLog(`ETH: ${result.balance.ethBalance.formatted}`);
-            this.addDebugLog(`${result.balance.tokenBalance.symbol}: ${result.balance.tokenBalance.formatted}`);
-
-            // 잔고 데이터 저장 및 표시
-            this.lastBalanceData = result.balance;
-            this.displayBalance(result.balance);
-            
-            // 조용한 잔고 조회 완료
-
-        } catch (error) {
-            this.addDebugLog(`잔고 조회 실패: ${error.message}`);
-            this.showStatus(`잔고 조회 실패: ${error.message}`, 'error');
-            
-            // 잔고 섹션 숨기기
-            const balanceSection = document.getElementById('balanceSection');
-            if (balanceSection) {
-                balanceSection.classList.add('hidden');
-            }
-        }
+        // 잔고 조회 비활성화
+        return;
     }
 
-    // 잔고 정보 UI에 표시
+    // 잔고 정보 UI에 표시 (비활성화됨)
     displayBalance(balance) {
-        const balanceInfo = document.getElementById('balanceInfo');
-        if (!balanceInfo) return;
-
-        const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : {
-            wallet_address: "지갑 주소",
-            balance: "잔액"
-        };
-
-        // 주소 축약 함수
-        const shortenAddress = (address) => {
-            if (!address) return '';
-            return `${address.slice(0, 6)}...${address.slice(-4)}`;
-        };
-
-        balanceInfo.innerHTML = `
-            <div class="balance-item">
-                <span class="balance-label">${texts.wallet_address}:</span>
-                <span class="balance-value">${shortenAddress(balance.address)}</span>
-            </div>
-            <div class="wallet-address">${balance.address}</div>
-            <div class="balance-item">
-                <span class="balance-label">${balance.tokenBalance.symbol} ${texts.balance}:</span>
-                <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(2)} ${balance.tokenBalance.symbol}</span>
-            </div>
-        `;
+        // 잔고 표시 비활성화
+        return;
     }
 }
 
