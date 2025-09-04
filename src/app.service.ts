@@ -1373,7 +1373,7 @@ export class AppService implements OnModuleInit {
         },
         tokenBalance: {
           raw: rawBal.toString(),
-          formatted: parseFloat(ethers.formatUnits(rawBal, decimals)).toFixed(6).replace(/\.?0+$/, ''),
+          formatted: ethers.formatUnits(rawBal, decimals),
           symbol: symbol,
           name: name,
           address: tokenAddress,
