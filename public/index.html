@@ -363,11 +363,11 @@
                 balanceInfo.innerHTML = `
                     <div class="balance-item">
                         <span class="balance-label">${texts.wallet_address}:</span>
-                        <div class="wallet-address-full" onclick="window.open('https://testnet.bscscan.com/address/${balance.address}', '_blank')">${balance.address}</div>
+                        <div class="wallet-address-full" onclick="window.open('https://bscscan.com/address/${balance.address}', '_blank')">${balance.address}</div>
                     </div>
                     <div class="balance-item">
                         <span class="balance-label">${balance.tokenBalance.symbol} ${texts.balance}:</span>
-                        <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(3)} ${balance.tokenBalance.symbol}</span>
+                        <span class="balance-value">${parseFloat(balance.tokenBalance.formatted).toFixed(6).replace(/\.?0+$/, '')} ${balance.tokenBalance.symbol}</span>
                     </div>
                 `;
             }

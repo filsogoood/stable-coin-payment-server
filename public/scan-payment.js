@@ -1042,7 +1042,7 @@ class PaymentScanner {
     // 암호화된 QR 코드 결제 처리 (기존 단일 QR)
     async handleEncryptedPayment(encryptedData) {
         try {
-            this.addDebugLog('🔐 암호화된 결제 데이터 처리 시작');
+            this.addDebugLog(' 암호화된 결제 데이터 처리 시작');
             this.addDebugLog(`- 암호화 데이터 크기: ${encryptedData.encryptedData.length}바이트`);
             this.addDebugLog(`- 생성 시간: ${new Date(encryptedData.timestamp).toLocaleString()}`);
             
@@ -1462,7 +1462,7 @@ class PaymentScanner {
                 </div>
                 <div class="transaction-info">
                     <div class="tx-label">${this.getI18nText('transaction_hash')}</div>
-                    <div class="tx-hash-full clickable-hash" onclick="window.open('https://testnet.bscscan.com/tx/${result.txHash}', '_blank')">${result.txHash}</div>
+                    <div class="tx-hash-full clickable-hash" onclick="window.open('https://bscscan.com/tx/${result.txHash}', '_blank')">${result.txHash}</div>
                 </div>
                 <div class="success-message-simple">
                     ${this.getI18nText('purchase_completed')}
@@ -1530,8 +1530,10 @@ class PaymentScanner {
         const remainingBalanceSection = document.getElementById('remainingBalanceSection');
         if (!remainingBalanceSection) return;
 
-        // 토큰 잔액을 TUSD 단위로 표시 (소숫점 3자리)
-        const tokenBalance = parseFloat(balance.tokenBalance.formatted).toFixed(3);
+        // 토큰 잔액을 TUSD 단위로 표시 (반올림 대신 정확한 값 표시)
+        const rawBalance = parseFloat(balance.tokenBalance.formatted);
+        // 소수점 6자리까지 표시하되, 뒷자리 0은 제거
+        const tokenBalance = rawBalance.toFixed(6).replace(/\.?0+$/, '');
 
         remainingBalanceSection.innerHTML = `
             <div class="remaining-balance-content">
@@ -1561,7 +1563,7 @@ class PaymentScanner {
         const txHashSection = error.txHash ? `
             <div class="transaction-info">
                 <div class="tx-label">실패한 거래 해시</div>
-                <div class="tx-hash-full clickable-hash" onclick="window.open('https://testnet.bscscan.com/tx/${error.txHash}', '_blank')">${error.txHash}</div>
+                <div class="tx-hash-full clickable-hash" onclick="window.open('https://bscscan.com/tx/${error.txHash}', '_blank')">${error.txHash}</div>
             </div>
         ` : '';
         
