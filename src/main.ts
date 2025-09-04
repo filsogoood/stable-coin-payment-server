@@ -160,7 +160,7 @@ async function bootstrap() {
   app.useStaticAssets(publicPath);
   logger.log('[BOOTSTRAP] 정적 파일 서빙 설정 완룼:', publicPath);
 
-  const port = process.env.PORT ?? 4123;
+  const port = process.env.PORT ?? 6753;
   logger.log('[BOOTSTRAP] 서버 시작 준비 완룼, 포트:', port);
   
   await app.listen(port);
