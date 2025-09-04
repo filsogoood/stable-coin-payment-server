@@ -246,13 +246,28 @@ class PaymentScanner {
             
             this.addDebugLog('QR 스캐너 시작 중...');
             
+            // 브라우저 환경 상세 확인
+            this.addDebugLog(`현재 URL: ${window.location.href}`);
+            this.addDebugLog(`프로토콜: ${window.location.protocol}`);
+            this.addDebugLog(`보안 컨텍스트: ${window.isSecureContext}`);
+            this.addDebugLog(`User Agent: ${navigator.userAgent}`);
+            
             // 모바일 기기 감지 (전체 함수에서 사용)
             const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             this.addDebugLog(`모바일 기기 감지: ${isMobile}`);
             
+            // MediaDevices API 상세 확인
+            this.addDebugLog(`navigator.mediaDevices 존재: ${!!navigator.mediaDevices}`);
+            this.addDebugLog(`getUserMedia 함수 존재: ${!!navigator.mediaDevices?.getUserMedia}`);
+            this.addDebugLog(`MediaDevices 프로토타입 확인: ${Object.prototype.toString.call(navigator.mediaDevices)}`);
+            
             // 기본 지원 확인
             if (!navigator.mediaDevices?.getUserMedia) {
-                throw new Error('카메라가 지원되지 않는 브라우저입니다.');
+                const errorMsg = window.location.protocol === 'http:' && window.location.hostname !== 'localhost' 
+                    ? '카메라 접근을 위해서는 HTTPS 연결이 필요합니다. HTTP에서는 카메라를 사용할 수 없습니다.'
+                    : '카메라가 지원되지 않는 브라우저입니다.';
+                this.addDebugLog(`카메라 지원 실패 원인: ${errorMsg}`);
+                throw new Error(errorMsg);
             }
             
             // QrScanner 라이브러리 확인
@@ -273,6 +288,19 @@ class PaymentScanner {
             
             // 명시적 카메라 권한 요청 (모바일 브라우저용)
             this.addDebugLog('카메라 권한 요청 중...');
+            
+            // 권한 API 지원 확인
+            if (navigator.permissions) {
+                try {
+                    const permission = await navigator.permissions.query({ name: 'camera' });
+                    this.addDebugLog(`카메라 권한 상태: ${permission.state}`);
+                } catch (permErr) {
+                    this.addDebugLog(`권한 상태 확인 실패: ${permErr.message}`);
+                }
+            } else {
+                this.addDebugLog('Permissions API 지원되지 않음');
+            }
+            
             try {
                 // 모바일 최적화된 카메라 설정
                 const constraints = {
@@ -298,16 +326,54 @@ class PaymentScanner {
                     }
                 };
                 
-                this.addDebugLog(`📹 카메라 제약 조건: ${JSON.stringify(constraints.video)}`);
+                this.addDebugLog(`카메라 제약 조건: ${JSON.stringify(constraints.video, null, 2)}`);
                 
+                this.addDebugLog('getUserMedia 호출 시작...');
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                this.addDebugLog(`스트림 획득 성공 - 트랙 개수: ${stream.getTracks().length}`);
+                stream.getTracks().forEach((track, index) => {
+                    this.addDebugLog(`트랙 ${index}: ${track.kind} - ${track.label} (상태: ${track.readyState})`);
+                });
+                
                 // 임시 스트림 정지 (권한 확인용)
                 stream.getTracks().forEach(track => track.stop());
                 this.addDebugLog('카메라 권한 확인 성공');
-                            } catch (permError) {
-                    this.addDebugLog(`카메라 권한 거부: ${permError.message}`);
-                    throw new Error(this.getI18nText('camera_permission_required'));
+                
+            } catch (permError) {
+                this.addDebugLog(`카메라 접근 실패 상세 정보:`);
+                this.addDebugLog(`- 에러 이름: ${permError.name}`);
+                this.addDebugLog(`- 에러 메시지: ${permError.message}`);
+                this.addDebugLog(`- 에러 코드: ${permError.code || '없음'}`);
+                this.addDebugLog(`- 에러 스택: ${permError.stack}`);
+                
+                let userFriendlyMessage = '';
+                switch(permError.name) {
+                    case 'NotAllowedError':
+                        userFriendlyMessage = '카메라 권한이 거부되었습니다. 브라우저 설정에서 카메라 권한을 허용해주세요.';
+                        break;
+                    case 'NotFoundError':
+                        userFriendlyMessage = '카메라를 찾을 수 없습니다. 기기에 카메라가 연결되어 있는지 확인해주세요.';
+                        break;
+                    case 'NotReadableError':
+                        userFriendlyMessage = '카메라가 다른 프로그램에서 사용 중입니다. 다른 앱을 종료하고 다시 시도해주세요.';
+                        break;
+                    case 'OverconstrainedError':
+                        userFriendlyMessage = '요청된 카메라 설정을 지원하지 않습니다. 다시 시도해주세요.';
+                        break;
+                    case 'SecurityError':
+                        userFriendlyMessage = '보안상의 이유로 카메라에 접근할 수 없습니다. HTTPS 연결이 필요할 수 있습니다.';
+                        break;
+                    case 'TypeError':
+                        userFriendlyMessage = '카메라 설정이 잘못되었습니다.';
+                        break;
+                    default:
+                        userFriendlyMessage = `카메라 접근 실패: ${permError.message}`;
                 }
+                
+                this.addDebugLog(`사용자 친화적 메시지: ${userFriendlyMessage}`);
+                throw new Error(userFriendlyMessage);
+            }
             
                         // QR 스캐너 초기화 (모바일 최적화)
             this.scanner = new QrScanner(
