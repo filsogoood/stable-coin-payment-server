@@ -1368,12 +1368,12 @@ export class AppService implements OnModuleInit {
         address,
         ethBalance: {
           raw: ethBal.toString(),
-          formatted: parseFloat(ethers.formatEther(ethBal)).toFixed(3),
+          formatted: parseFloat(ethers.formatEther(ethBal)).toFixed(6).replace(/\.?0+$/, ''),
           symbol: 'ETH',
         },
         tokenBalance: {
           raw: rawBal.toString(),
-          formatted: parseFloat(ethers.formatUnits(rawBal, decimals)).toFixed(3),
+          formatted: parseFloat(ethers.formatUnits(rawBal, decimals)).toFixed(6).replace(/\.?0+$/, ''),
           symbol: symbol,
           name: name,
           address: tokenAddress,

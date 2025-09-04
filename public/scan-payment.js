@@ -1419,7 +1419,8 @@ class PaymentScanner {
                 this.addDebugLog(`금액 변환 시도: ${amountWei}`);
                 // Wei에서 Ether로 변환 (18 decimals)
                 const ethAmount = Number(amountWei) / Math.pow(10, 18);
-                const formatted = ethAmount.toFixed(3); // 소수점 3자리까지 표시
+                // 반올림 대신 정확한 값 표시 (소수점 6자리까지, 뒷자리 0 제거)
+                const formatted = ethAmount.toFixed(6).replace(/\.?0+$/, '');
                 this.addDebugLog(`금액 변환 결과: ${formatted}`);
                 return formatted;
             } catch (e) {
