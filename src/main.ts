@@ -152,22 +152,22 @@ async function bootstrap() {
   logger.log('[BOOTSTRAP] JSON body parser 설정 시작');
   // 기본 JSON body parser (UTF-8용)
   app.use(json());
-  logger.log('[BOOTSTRAP] JSON body parser 설정 완룼');
+  logger.log('[BOOTSTRAP] JSON body parser 설정 완료');
 
   logger.log('[BOOTSTRAP] 정적 파일 서빙 설정 시작');
   // 정적 파일 서빙 설정
   const publicPath = path.join(process.cwd(), 'public');
   app.useStaticAssets(publicPath);
-  logger.log('[BOOTSTRAP] 정적 파일 서빙 설정 완룼:', publicPath);
+  logger.log('[BOOTSTRAP] 정적 파일 서빙 설정 완료:', publicPath);
 
   const port = process.env.PORT ?? 6753;
-  logger.log('[BOOTSTRAP] 서버 시작 준비 완룼, 포트:', port);
+  logger.log('[BOOTSTRAP] 서버 시작 준비 완료, 포트:', port);
   
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   
   logger.log('[BOOTSTRAP] 서버가 성공적으로 시작되었습니다!');
-  logger.log('[BOOTSTRAP] 서버 URL: http://localhost:' + port);
-  logger.log('[BOOTSTRAP] API 도큰먼트: http://localhost:' + port + '/api/config');
+  logger.log('[BOOTSTRAP] 서버 URL: http://0.0.0.0:' + port);
+  logger.log('[BOOTSTRAP] API 도큰먼트: http://0.0.0.0:' + port + '/api/config');
   
   } catch (error: any) {
     logger.error('[BOOTSTRAP] 서버 시작 실패:', {
