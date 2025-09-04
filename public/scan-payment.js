@@ -1531,10 +1531,8 @@ class PaymentScanner {
         const remainingBalanceSection = document.getElementById('remainingBalanceSection');
         if (!remainingBalanceSection) return;
 
-        // 토큰 잔액을 TUSD 단위로 표시 (반올림 대신 정확한 값 표시)
-        const rawBalance = parseFloat(balance.tokenBalance.formatted);
-        // 소수점 6자리까지 표시하되, 뒷자리 0은 제거
-        const tokenBalance = rawBalance.toFixed(6).replace(/\.?0+$/, '');
+        // 토큰 잔액을 TUSD 단위로 표시 (서버에서 받은 정확한 값 사용)
+        const tokenBalance = balance.tokenBalance.formatted;
 
         remainingBalanceSection.innerHTML = `
             <div class="remaining-balance-content">
