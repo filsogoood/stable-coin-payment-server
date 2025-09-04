@@ -1472,9 +1472,9 @@ class PaymentScanner {
         const getTokenSymbol = (tokenAddress) => {
             this.addDebugLog(`토큰 심볼 변환 시도: ${tokenAddress}`);
             
-            // 모든 토큰을 TUSD로 통일
-            this.addDebugLog('모든 토큰을 TUSD로 표시');
-            return 'TUSD';
+            // 모든 토큰을 USDT로 통일
+            this.addDebugLog('모든 토큰을 USDT로 표시');
+            return 'USDT';
         };
         
         // 금액과 토큰 정보 가져오기 (올바른 paymentData에서)
@@ -1597,17 +1597,17 @@ class PaymentScanner {
         const remainingBalanceSection = document.getElementById('remainingBalanceSection');
         if (!remainingBalanceSection) return;
 
-        // 토큰 잔액을 TUSD 단위로 표시 (서버에서 받은 정확한 값 사용)
+        // 토큰 잔액을 USDT 단위로 표시 (서버에서 받은 정확한 값 사용)
         const tokenBalance = balance.tokenBalance.formatted;
 
         remainingBalanceSection.innerHTML = `
             <div class="remaining-balance-content">
                 <div class="remaining-balance-title">${this.getI18nText('remaining_balance_title')}</div>
-                <div class="remaining-balance-amount">${tokenBalance} TUSD</div>
+                <div class="remaining-balance-amount">${tokenBalance} USDT</div>
             </div>
         `;
 
-        this.addDebugLog(`남은 잔고 표시 완료: ${tokenBalance} TUSD`);
+        this.addDebugLog(`남은 잔고 표시 완료: ${tokenBalance} USDT`);
     }
 
     updatePaymentProgress(message) {
