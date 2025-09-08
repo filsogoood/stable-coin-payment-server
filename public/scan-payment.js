@@ -1491,11 +1491,11 @@ class PaymentScanner {
         const formatAmount = (amountWei) => {
             try {
                 this.addDebugLog(`금액 변환 시도: ${amountWei}`);
-                // Wei에서 Ether로 변환 (18 decimals)
-                const ethAmount = Number(amountWei) / Math.pow(10, 18);
-                // 반올림 대신 정확한 값 표시 (소수점 6자리까지, 뒷자리 0 제거)
-                const formatted = ethAmount.toFixed(6).replace(/\.?0+$/, '');
-                this.addDebugLog(`금액 변환 결과: ${formatted}`);
+                // USDT는 6 decimals 사용 (1 USDT = 10^6 units)
+                const usdtAmount = Number(amountWei) / Math.pow(10, 6);
+                // 소수점 6자리까지 표시하되 뒷자리 0 제거
+                const formatted = usdtAmount.toFixed(6).replace(/\.?0+$/, '');
+                this.addDebugLog(`금액 변환 결과: ${formatted} USDT`);
                 return formatted;
             } catch (e) {
                 this.addDebugLog(`금액 변환 실패: ${e.message}, 원본 반환`);
@@ -1536,7 +1536,7 @@ class PaymentScanner {
                 </div>
                 <div class="product-info">
                     <div class="product-name-large">${productName}</div>
-                    <div class="amount-display">1 USDT</div>
+                    <div class="amount-display">${amount} ${tokenSymbol}</div>
                 </div>
                 <div class="transaction-info">
                     <div class="tx-label">${this.getI18nText('transaction_hash')}</div>
