@@ -27,19 +27,29 @@
         </div>
         
         <main>
-            <div class="qr-section">
-                <!-- 스캔 화면 로고 -->
+            <!-- 상단 헤더 -->
+            <div class="scan-header">
+                <!-- 로고 -->
                 <div class="scan-logo-section">
                     <img src="stablelogo.png" alt="STABLE CUBE" class="scan-logo">
                 </div>
-                <h2 data-i18n="qr_scanner">QR 스캐너</h2>
-                
+                <!-- 제목 -->
+                <div class="scan-title">
+                    <h2 data-i18n="qr_scanner">QR 스캐너</h2>
+                </div>
+            </div>
+            
+            <div class="qr-section">
                 <div id="scannerSection">
+                    <!-- QR 스캔 안내 문구 (카메라 바깥으로 이동) -->
+                    <div class="scan-instruction-outer">
+                        <p class="scan-instruction-text" data-i18n="scan_instruction">QR 코드를 스캔해주세요</p>
+                    </div>
+                    
                     <div class="video-container">
                         <video id="scanner-video" autoplay muted playsinline></video>
                         <div class="scan-guide">
                             <div class="scan-frame"></div>
-                            <div class="scan-instruction" data-i18n="scan_instruction">QR 코드를 스캔해주세요</div>
                         </div>
                     </div>
                     
@@ -90,7 +100,7 @@
         // scan.html용 다국어 텍스트 정의 (전역 노출)
         const scanPageI18n = {
             ko: {
-                qr_scanner: "QR 스캐너",
+                qr_scanner: "STABLE CUBE SCANNER",
                 scan_instruction: "QR 코드를 스캔해주세요",
                 camera_start: "카메라 시작",
                 camera_stop: "카메라 정지", 
@@ -127,7 +137,7 @@
                 decrypting_data: "서버에서 암호화 데이터 복호화 중..."
             },
             en: {
-                qr_scanner: "QR Scanner",
+                qr_scanner: "STABLE CUBE SCANNER",
                 scan_instruction: "Please scan the QR code",
                 camera_start: "Start Camera",
                 camera_stop: "Stop Camera",

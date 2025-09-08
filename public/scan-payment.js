@@ -112,11 +112,12 @@ class PaymentScanner {
             // 조용한 잔고 조회 시작
             
             // 스캔 가이드 업데이트 - 다국어 지원
-            const scanGuide = document.querySelector('.scan-instruction');
+            const scanGuide = document.querySelector('.scan-instruction-text');
             if (scanGuide) {
                 const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
                 scanGuide.textContent = texts ? texts.scan_payment_qr : '결제 QR 코드를 스캔해주세요';
-                scanGuide.style.color = '#FFC107';
+                scanGuide.style.background = 'rgba(255, 193, 7, 0.15)';
+                scanGuide.style.borderColor = 'rgba(255, 193, 7, 0.4)';
             }
             
             // 잔고 조회 비활성화
@@ -143,11 +144,12 @@ class PaymentScanner {
             this.addDebugLog(`✅ sessionStorage에서 개인키 복구 완료: ${this.walletPrivateKey.substring(0, 10)}...`);
             
             // 스캔 가이드 업데이트 - 다국어 지원
-            const scanGuide = document.querySelector('.scan-instruction');
+            const scanGuide = document.querySelector('.scan-instruction-text');
             if (scanGuide) {
                 const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
                 scanGuide.textContent = texts ? texts.scan_payment_qr : '결제 QR 코드를 스캔해주세요';
-                scanGuide.style.color = '#FFC107';
+                scanGuide.style.background = 'rgba(255, 193, 7, 0.15)';
+                scanGuide.style.borderColor = 'rgba(255, 193, 7, 0.4)';
             }
             
             // 잔고 조회 비활성화
@@ -181,11 +183,12 @@ class PaymentScanner {
             // 조용한 잔고 조회 시작
             
             // 스캔 가이드 업데이트 - 다국어 지원
-            const scanGuide = document.querySelector('.scan-instruction');
+            const scanGuide = document.querySelector('.scan-instruction-text');
             if (scanGuide) {
                 const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
                 scanGuide.textContent = texts ? texts.scan_payment_qr : '결제 QR 코드를 스캔해주세요';
-                scanGuide.style.color = '#FFC107';
+                scanGuide.style.background = 'rgba(255, 193, 7, 0.15)';
+                scanGuide.style.borderColor = 'rgba(255, 193, 7, 0.4)';
             }
             
             // 잔고 조회 비활성화
@@ -773,11 +776,12 @@ class PaymentScanner {
             // 조용한 잔고 조회 시작
             
             // 스캔 가이드 업데이트 - 다국어 지원
-            const scanGuide = document.querySelector('.scan-instruction');
+            const scanGuide = document.querySelector('.scan-instruction-text');
             if (scanGuide) {
                 const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
                 scanGuide.textContent = texts ? texts.scan_payment_qr : '결제 QR 코드를 스캔해주세요';
-                scanGuide.style.color = '#FFC107';
+                scanGuide.style.background = 'rgba(255, 193, 7, 0.15)';
+                scanGuide.style.borderColor = 'rgba(255, 193, 7, 0.4)';
             }
             
             // 잔고 조회 및 표시 비활성화
@@ -837,10 +841,12 @@ class PaymentScanner {
                 this.pauseScanning = false;
                 
                 // 스캔 가이드 텍스트 업데이트
-                const scanGuide = document.querySelector('.scan-instruction');
+                const scanGuide = document.querySelector('.scan-instruction-text');
                 if (scanGuide) {
-                    scanGuide.textContent = '두 번째 QR(결제정보)를 이 영역에 맞춰주세요';
-                    scanGuide.style.color = '#e74c3c'; // 빨간색으로 강조
+                    scanGuide.textContent = '두 번째 QR(결제정보)를 스캔해주세요';
+                    scanGuide.style.background = 'rgba(231, 76, 60, 0.15)';
+                    scanGuide.style.borderColor = 'rgba(231, 76, 60, 0.4)';
+                    scanGuide.style.color = '#e74c3c';
                 }
                 
                 this.showStatus('두 번째 QR 코드(결제정보)를 스캔해주세요!', 'info');
@@ -1035,10 +1041,12 @@ class PaymentScanner {
                 this.pauseScanning = false;
                 
                 // 스캔 가이드 텍스트 업데이트
-                const scanGuide = document.querySelector('.scan-instruction');
+                const scanGuide = document.querySelector('.scan-instruction-text');
                 if (scanGuide) {
-                    scanGuide.textContent = '두 번째 QR(결제정보)를 이 영역에 맞춰주세요';
-                    scanGuide.style.color = '#e74c3c'; // 빨간색으로 강조
+                    scanGuide.textContent = '두 번째 QR(결제정보)를 스캔해주세요';
+                    scanGuide.style.background = 'rgba(231, 76, 60, 0.15)';
+                    scanGuide.style.borderColor = 'rgba(231, 76, 60, 0.4)';
+                    scanGuide.style.color = '#e74c3c';
                 }
                 
                 this.showStatus('두 번째 QR 코드(결제정보)를 스캔해주세요!', 'info');
@@ -1528,7 +1536,7 @@ class PaymentScanner {
                 </div>
                 <div class="product-info">
                     <div class="product-name-large">${productName}</div>
-                    <div class="amount-display">${amount} ${tokenSymbol}</div>
+                    <div class="amount-display">1 USDT</div>
                 </div>
                 <div class="transaction-info">
                     <div class="tx-label">${this.getI18nText('transaction_hash')}</div>

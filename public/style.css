@@ -192,37 +192,115 @@ main {
     box-sizing: border-box;
 }
 
-/* 로고 스타일 */
-.logo-section {
-    text-align: center;
+/* 메인 페이지 헤더 스타일 */
+.main-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
     margin-bottom: 2rem;
+    padding: 1rem;
     animation: logoFadeIn 1.5s ease-out;
 }
 
+.logo-section {
+    flex-shrink: 0;
+}
+
 .main-logo {
-    width: 120px;
+    width: 80px;
     height: auto;
-    max-width: 30vw;
-    filter: drop-shadow(0 4px 12px rgba(255, 193, 7, 0.3));
+    filter: drop-shadow(0 4px 12px rgba(255, 193, 7, 0.4));
     transition: all 0.3s ease;
 }
 
 .main-logo:hover {
-    transform: scale(1.05);
-    filter: drop-shadow(0 6px 16px rgba(255, 193, 7, 0.4));
+    transform: scale(1.05) rotate(2deg);
+    filter: drop-shadow(0 6px 16px rgba(255, 193, 7, 0.5));
+}
+
+.brand-text {
+    text-align: left;
+}
+
+.brand-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #FFC107;
+    margin: 0;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+}
+
+.brand-subtitle {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+/* 스캔 페이지 헤더 스타일 */
+.scan-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(255, 193, 7, 0.2);
+    animation: logoFadeIn 1s ease-out;
 }
 
 .scan-logo-section {
+    flex-shrink: 0;
+}
+
+.scan-logo {
+    width: 50px;
+    height: auto;
+    filter: drop-shadow(0 2px 8px rgba(255, 193, 7, 0.3));
+    transition: all 0.3s ease;
+}
+
+.scan-logo:hover {
+    transform: scale(1.1);
+    filter: drop-shadow(0 3px 10px rgba(255, 193, 7, 0.4));
+}
+
+.scan-title h2 {
+    color: #FFFFFF;
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+/* QR 스캔 안내 문구 (카메라 바깥) */
+.scan-instruction-outer {
     text-align: center;
     margin-bottom: 1rem;
 }
 
-.scan-logo {
-    width: 60px;
-    height: auto;
-    max-width: 20vw;
-    filter: drop-shadow(0 2px 8px rgba(255, 193, 7, 0.3));
-    opacity: 0.9;
+.scan-instruction-text {
+    color: #FFC107;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    padding: 0.8rem 1.5rem;
+    background: rgba(255, 193, 7, 0.1);
+    border: 2px solid rgba(255, 193, 7, 0.3);
+    border-radius: 25px;
+    backdrop-filter: blur(10px);
+    display: inline-block;
+    letter-spacing: 0.02em;
+    box-shadow: 0 4px 16px rgba(255, 193, 7, 0.2);
+    transition: all 0.3s ease;
+}
+
+.scan-instruction-text:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 193, 7, 0.3);
 }
 
 @keyframes logoFadeIn {
@@ -248,13 +326,14 @@ main {
     background: rgba(42, 42, 42, 0.95) !important;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 193, 7, 0.2);
+    border: 1px solid rgba(255, 193, 7, 0.3);
     border-radius: 24px;
-    padding: 1.5rem 1rem;
+    padding: 2rem 1.5rem;
     text-align: center;
     box-shadow: 
         0 8px 32px rgba(0, 0, 0, 0.3),
-        inset 0 1px 0 rgba(255, 193, 7, 0.1);
+        0 0 0 1px rgba(255, 193, 7, 0.1),
+        inset 0 1px 0 rgba(255, 193, 7, 0.15);
     transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
     position: relative;
     overflow: hidden;
@@ -287,18 +366,20 @@ main {
 }
 
 .card h2 {
-    margin-bottom: 1rem;
+    margin-bottom: 1.2rem;
     color: #FFFFFF;
     font-weight: 700;
-    font-size: 1.5rem;
+    font-size: 1.6rem;
     letter-spacing: -0.02em;
+    text-shadow: 0 2px 8px rgba(255, 255, 255, 0.1);
 }
 
 .card p {
-    margin-bottom: 1.5rem;
-    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 2rem;
+    color: rgba(255, 255, 255, 0.8);
     font-weight: 400;
-    line-height: 1.6;
+    line-height: 1.7;
+    font-size: 1.05rem;
 }
 
 /* 버튼 */
@@ -336,21 +417,25 @@ main {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #FFC107 0%, #FF8F00 100%);
+    background: linear-gradient(135deg, #FFC107 0%, #FFB300 50%, #FF8F00 100%);
     color: #1a1a1a;
-    border: 1px solid rgba(255, 193, 7, 0.3);
+    border: 1px solid rgba(255, 193, 7, 0.4);
     box-shadow: 
-        0 4px 16px rgba(255, 193, 7, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        0 6px 20px rgba(255, 193, 7, 0.4),
+        0 2px 8px rgba(255, 193, 7, 0.2),
+        inset 0 2px 0 rgba(255, 255, 255, 0.25);
+    font-weight: 700;
+    letter-spacing: 0.01em;
 }
 
 .btn-primary:hover {
-    transform: translateY(-4px) scale(1.02);
-    background: linear-gradient(135deg, #FFD54F 0%, #FFA000 100%);
+    transform: translateY(-6px) scale(1.03);
+    background: linear-gradient(135deg, #FFD54F 0%, #FFC107 50%, #FFA000 100%);
     box-shadow: 
-        0 8px 32px rgba(255, 193, 7, 0.5),
-        0 0 0 1px rgba(255, 193, 7, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        0 12px 40px rgba(255, 193, 7, 0.6),
+        0 4px 16px rgba(255, 193, 7, 0.3),
+        0 0 0 2px rgba(255, 193, 7, 0.5),
+        inset 0 2px 0 rgba(255, 255, 255, 0.35);
 }
 
 .btn-secondary {
@@ -410,20 +495,22 @@ main {
     /* iOS Safari 강제 적용 */
     background-color: rgba(42, 42, 42, 0.95) !important;
     background: rgba(42, 42, 42, 0.95) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 193, 7, 0.2);
-    border-radius: 24px;
-    padding: 1.5rem 1rem;
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 28px;
+    padding: 2rem 1.5rem;
     text-align: center;
     box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        inset 0 1px 0 rgba(255, 193, 7, 0.1);
-    margin-bottom: 1rem;
+        0 12px 48px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 193, 7, 0.15),
+        inset 0 2px 0 rgba(255, 193, 7, 0.1);
+    margin-bottom: 1.5rem;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
     overflow: hidden;
+    transition: all 0.3s ease;
 }
 
 .qr-section h2, .qr-section h3 {
@@ -457,15 +544,25 @@ main {
     width: 100%;
     max-width: 420px;
     margin: 0 auto;
-    border-radius: 16px;
+    border-radius: 20px;
     overflow: hidden;
     box-shadow: 
-        0 12px 40px rgba(0, 0, 0, 0.3),
-        0 0 0 1px rgba(255, 193, 7, 0.2);
-    background: #000;
+        0 16px 48px rgba(0, 0, 0, 0.4),
+        0 4px 16px rgba(255, 193, 7, 0.3),
+        0 0 0 2px rgba(255, 193, 7, 0.25);
+    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
     aspect-ratio: 1/1;
     min-height: 300px;
-    border: 2px solid rgba(255, 193, 7, 0.1);
+    border: 3px solid rgba(255, 193, 7, 0.2);
+    transition: all 0.3s ease;
+}
+
+.video-container:hover {
+    transform: translateY(-4px);
+    box-shadow: 
+        0 20px 56px rgba(0, 0, 0, 0.5),
+        0 6px 20px rgba(255, 193, 7, 0.4),
+        0 0 0 3px rgba(255, 193, 7, 0.35);
 }
 
 #scanner-video {
@@ -731,19 +828,40 @@ footer {
         padding: 1.5rem;
     }
 
-    /* 모바일 로고 최적화 */
-    .logo-section {
+    /* 모바일 헤더 최적화 */
+    .main-header {
+        gap: 1rem;
         margin-bottom: 1.5rem;
+        padding: 0.8rem;
+        flex-direction: column;
+        text-align: center;
     }
 
-    .main-logo {
-        width: 100px;
-        max-width: 25vw;
+    .brand-text {
+        text-align: center;
+    }
+
+    .brand-title {
+        font-size: 1.5rem;
+    }
+
+    .scan-header {
+        gap: 0.8rem;
+        margin-bottom: 1rem;
+        padding: 0.8rem 0;
     }
 
     .scan-logo {
-        width: 50px;
-        max-width: 15vw;
+        width: 40px;
+    }
+
+    .scan-title h2 {
+        font-size: 1.2rem;
+    }
+
+    .scan-instruction-text {
+        font-size: 1rem;
+        padding: 0.6rem 1.2rem;
     }
     
     /* 모바일 카메라 최적화 */
@@ -837,19 +955,43 @@ footer {
         margin-top: 12px;
     }
 
-    /* 작은 화면 로고 최적화 */
-    .logo-section {
+    /* 작은 화면 헤더 최적화 */
+    .main-header {
+        gap: 0.8rem;
         margin-bottom: 1rem;
+        padding: 0.6rem;
     }
 
     .main-logo {
-        width: 80px;
-        max-width: 20vw;
+        width: 60px;
+    }
+
+    .brand-title {
+        font-size: 1.3rem;
+    }
+
+    .brand-subtitle {
+        font-size: 0.8rem;
+    }
+
+    .scan-header {
+        gap: 0.6rem;
+        margin-bottom: 0.8rem;
+        padding: 0.6rem 0;
     }
 
     .scan-logo {
-        width: 40px;
-        max-width: 12vw;
+        width: 35px;
+    }
+
+    .scan-title h2 {
+        font-size: 1.1rem;
+    }
+
+    .scan-instruction-text {
+        font-size: 0.9rem;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
     }
 
     /* 결제 결과 화면 로고 작은 화면 최적화 */
@@ -922,25 +1064,7 @@ footer {
     -webkit-backdrop-filter: blur(1px);
 }
 
-.scan-instruction {
-    text-align: center;
-    margin-top: 20px;
-    /* iOS Safari fallback */
-    background-color: rgba(26, 26, 26, 0.95);
-    background: rgba(26, 26, 26, 0.95);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    color: #FFC107;
-    padding: 14px 24px;
-    border-radius: 30px;
-    font-size: 16px;
-    font-weight: 600;
-    border: 2px solid rgba(255, 193, 7, 0.4);
-    letter-spacing: 0.02em;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    max-width: 90vw;
-    word-wrap: break-word;
-}
+/* 기존 scan-instruction 제거됨 - 새로운 scan-instruction-text 사용 */
 
 @keyframes scanPulse {
     0%, 100% {
