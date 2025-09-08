@@ -1523,6 +1523,9 @@ class PaymentScanner {
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
             <div class="payment-success-content">
+                <div class="success-logo-section">
+                    <img src="stablelogo.png" alt="STABLE CUBE" class="success-logo">
+                </div>
                 <div class="product-info">
                     <div class="product-name-large">${productName}</div>
                     <div class="amount-display">${amount} ${tokenSymbol}</div>
@@ -1635,6 +1638,9 @@ class PaymentScanner {
         const resultInfo = document.getElementById('resultInfo');
         resultInfo.innerHTML = `
             <div class="payment-error-content">
+                <div class="error-logo-section">
+                    <img src="stablelogo.png" alt="STABLE CUBE" class="error-logo">
+                </div>
                 <h2>결제 실패</h2>
                 <div class="error-info">
                     <div class="error-message">${error.message}</div>
