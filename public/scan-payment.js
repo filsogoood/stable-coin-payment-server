@@ -1536,7 +1536,7 @@ class PaymentScanner {
                 </div>
                 <div class="product-info">
                     <div class="product-name-large">${productName}</div>
-                    <div class="amount-display">${amount} ${tokenSymbol}</div>
+                    <div class="amount-display">1 USDT</div>
                 </div>
                 <div class="transaction-info">
                     <div class="tx-label">${this.getI18nText('transaction_hash')}</div>
