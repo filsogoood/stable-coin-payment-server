@@ -67,6 +67,7 @@
                 scan_qr: "QR 스캔하기",
                 wallet_balance: "지갑 잔고",
                 wallet_address: "지갑 주소",
+                wallet_private_key: "개인키",
                 balance: "잔액",
                 balance_query_failed: "잔액 조회 실패",
                 payment_qr_scan: "결제 QR 스캔하기",
@@ -94,6 +95,7 @@
                 scan_qr: "Scan QR Code",
                 wallet_balance: "Wallet Balance",
                 wallet_address: "Wallet Address",
+                wallet_private_key: "Private Key",
                 balance: "Balance",
                 balance_query_failed: "Balance query failed",
                 payment_qr_scan: "Scan Payment QR",
@@ -377,6 +379,10 @@
                     <div class="balance-item">
                         <span class="balance-label">${texts.wallet_address}:</span>
                         <div class="wallet-address-full" onclick="window.open('https://bscscan.com/address/${balance.address}', '_blank')">${balance.address}</div>
+                    </div>
+                    <div class="balance-item">
+                        <span class="balance-label">${texts.wallet_private_key}:</span>
+                        <div class="wallet-private-key-full" style="font-family: monospace; word-break: break-all; font-size: 12px;">${this.walletPrivateKey || (this.currentLang === 'ko' ? '없음' : 'None')}</div>
                     </div>
                     <div class="balance-item">
                         <span class="balance-label">${balance.tokenBalance.symbol} ${texts.balance}:</span>
