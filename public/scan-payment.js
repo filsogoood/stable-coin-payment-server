@@ -23,8 +23,16 @@ class PaymentScanner {
     
     // 다국어 텍스트 가져오기 헬퍼 함수
     getI18nText(key) {
-        const texts = window.scanPageI18n ? window.scanPageI18n[this.currentLang] : null;
-        return texts ? texts[key] : key;
+        // 현재 언어 상태 재확인 (sessionStorage에서 직접 가져오기)
+        const currentLang = sessionStorage.getItem('preferred_language') || this.currentLang || 'ko';
+        
+        const texts = window.scanPageI18n ? window.scanPageI18n[currentLang] : null;
+        const result = texts ? texts[key] : key;
+        
+        // 디버깅용 로그
+        this.addDebugLog(`getI18nText('${key}'): 언어=${currentLang}, 결과=${result}`);
+        
+        return result;
     }
     
     // 다국어 지원 showStatus 함수
@@ -1470,11 +1478,53 @@ class PaymentScanner {
         this.addDebugLog('결제 성공 처리 시작');
         this.addDebugLog(`결제 결과: ${JSON.stringify(result)}`);
         
-        // 결제 진행 섹션 숨기기
-        document.getElementById('paymentProcessing').classList.add('hidden');
+        // 현재 언어 설정 명시적 업데이트
+        this.currentLang = sessionStorage.getItem('preferred_language') || 'ko';
+        this.addDebugLog(`결제 성공 화면 표시 시 언어 설정: ${this.currentLang}`);
+        
+        // 모든 이전 섹션 강제로 숨기기
+        const scannerSection = document.getElementById('scannerSection');
+        const paymentProcessing = document.getElementById('paymentProcessing');
+        const statusSection = document.getElementById('status');
+        
+        this.addDebugLog(`DOM 요소 찾기 결과:`);
+        this.addDebugLog(`- scannerSection: ${scannerSection ? '찾음' : '없음'}`);
+        this.addDebugLog(`- paymentProcessing: ${paymentProcessing ? '찾음' : '없음'}`);
+        this.addDebugLog(`- statusSection: ${statusSection ? '찾음' : '없음'}`);
+        
+        if (scannerSection) {
+            const beforeDisplay = window.getComputedStyle(scannerSection).display;
+            scannerSection.style.display = 'none';
+            scannerSection.classList.add('hidden');
+            const afterDisplay = window.getComputedStyle(scannerSection).display;
+            this.addDebugLog(`scannerSection display: ${beforeDisplay} → ${afterDisplay}`);
+        }
+        if (paymentProcessing) {
+            const beforeDisplay = window.getComputedStyle(paymentProcessing).display;
+            paymentProcessing.style.display = 'none';
+            paymentProcessing.classList.add('hidden');
+            const afterDisplay = window.getComputedStyle(paymentProcessing).display;
+            this.addDebugLog(`paymentProcessing display: ${beforeDisplay} → ${afterDisplay}`);
+        }
+        if (statusSection) {
+            const beforeDisplay = window.getComputedStyle(statusSection).display;
+            statusSection.style.display = 'none';
+            statusSection.classList.add('hidden');
+            const afterDisplay = window.getComputedStyle(statusSection).display;
+            this.addDebugLog(`statusSection display: ${beforeDisplay} → ${afterDisplay}`);
+        }
         
         // 결과 섹션 표시
-        document.getElementById('resultSection').classList.remove('hidden');
+        const resultSection = document.getElementById('resultSection');
+        if (resultSection) {
+            const beforeDisplay = window.getComputedStyle(resultSection).display;
+            resultSection.style.display = 'block';
+            resultSection.classList.remove('hidden');
+            const afterDisplay = window.getComputedStyle(resultSection).display;
+            this.addDebugLog(`resultSection display: ${beforeDisplay} → ${afterDisplay}`);
+        } else {
+            this.addDebugLog('resultSection 찾을 수 없음!');
+        }
         
         // 토큰 주소를 심볼로 변환하는 함수
         const getTokenSymbol = (tokenAddress) => {
@@ -1539,14 +1589,14 @@ class PaymentScanner {
                     <div class="amount-display">1 USDT</div>
                 </div>
                 <div class="transaction-info">
-                    <div class="tx-label">${this.getI18nText('transaction_hash')}</div>
+                    <div class="tx-label" data-i18n="transaction_hash">${this.getI18nText('transaction_hash')}</div>
                     <div class="tx-hash-full clickable-hash" onclick="window.open('https://bscscan.com/tx/${result.txHash}', '_blank')">${result.txHash}</div>
                 </div>
-                <div class="success-message-simple">
+                <div class="success-message-simple" data-i18n="purchase_completed">
                     ${this.getI18nText('purchase_completed')}
                 </div>
                 <div id="remainingBalanceSection" class="remaining-balance-section">
-                    <div class="remaining-balance-text">${this.getI18nText('remaining_balance_loading')}</div>
+                    <div class="remaining-balance-text" data-i18n="remaining_balance_loading">${this.getI18nText('remaining_balance_loading')}</div>
                 </div>
             </div>
         `;
@@ -1595,8 +1645,8 @@ class PaymentScanner {
             const remainingBalanceSection = document.getElementById('remainingBalanceSection');
             if (remainingBalanceSection) {
                 remainingBalanceSection.innerHTML = `
-                    <div class="remaining-balance-error">
-                        남은 잔고를 조회할 수 없습니다.
+                    <div class="remaining-balance-error" data-i18n="remaining_balance_error">
+                        ${this.getI18nText('remaining_balance_error')}
                     </div>
                 `;
             }
@@ -1613,7 +1663,7 @@ class PaymentScanner {
 
         remainingBalanceSection.innerHTML = `
             <div class="remaining-balance-content">
-                <div class="remaining-balance-title">${this.getI18nText('remaining_balance_title')}</div>
+                <div class="remaining-balance-title" data-i18n="remaining_balance_title">${this.getI18nText('remaining_balance_title')}</div>
                 <div class="remaining-balance-amount">${tokenBalance} USDT</div>
             </div>
         `;
@@ -1629,11 +1679,34 @@ class PaymentScanner {
     }
 
     handlePaymentError(error) {
-        // 결제 진행 섹션 숨기기
-        document.getElementById('paymentProcessing').classList.add('hidden');
+        // 현재 언어 설정 명시적 업데이트
+        this.currentLang = sessionStorage.getItem('preferred_language') || 'ko';
+        this.addDebugLog(`결제 실패 화면 표시 시 언어 설정: ${this.currentLang}`);
+        
+        // 모든 이전 섹션 강제로 숨기기
+        const scannerSection = document.getElementById('scannerSection');
+        const paymentProcessing = document.getElementById('paymentProcessing');
+        const statusSection = document.getElementById('status');
+        
+        if (scannerSection) {
+            scannerSection.style.display = 'none';
+            scannerSection.classList.add('hidden');
+        }
+        if (paymentProcessing) {
+            paymentProcessing.style.display = 'none';
+            paymentProcessing.classList.add('hidden');
+        }
+        if (statusSection) {
+            statusSection.style.display = 'none';
+            statusSection.classList.add('hidden');
+        }
         
         // 결과 섹션 표시 (에러 결과)
-        document.getElementById('resultSection').classList.remove('hidden');
+        const resultSection = document.getElementById('resultSection');
+        if (resultSection) {
+            resultSection.style.display = 'block';
+            resultSection.classList.remove('hidden');
+        }
         
         // 실패해도 트랜잭션 해시가 있을 수 있음 (리버트된 트랜잭션)
         const txHashSection = error.txHash ? `
@@ -1661,8 +1734,7 @@ class PaymentScanner {
             </div>
         `;
         
-        const errorMessage = this.getI18nText('payment_failed') + ': ' + error.message;
-        this.showStatus(errorMessage, 'error');
+        // showStatus 호출하지 않음 - 이미 resultSection에 에러가 표시되므로
     }
 
 

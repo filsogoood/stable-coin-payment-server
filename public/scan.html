@@ -129,6 +129,7 @@
                 transaction_hash: "거래 해시",
                 remaining_balance_loading: "남은 잔고 조회 중...",
                 remaining_balance_title: "남은 잔고",
+                remaining_balance_error: "남은 잔고를 조회할 수 없습니다.",
                 // 결제 진행 단계 메시지들
                 generating_signature: "서명 생성 중...",
                 verifying_signature: "서명 검증 및 결제 실행 중...",
@@ -166,6 +167,7 @@
                 transaction_hash: "Transaction Hash",
                 remaining_balance_loading: "Loading remaining balance...",
                 remaining_balance_title: "Remaining Balance",
+                remaining_balance_error: "Unable to retrieve remaining balance.",
                 // 결제 진행 단계 메시지들
                 generating_signature: "Generating signature...",
                 verifying_signature: "Verifying signature and executing payment...",
@@ -291,8 +293,14 @@
             // 결제 완료 섹션의 메시지들도 필요시 업데이트
             const resultSection = document.getElementById('resultSection');
             if (resultSection && !resultSection.classList.contains('hidden')) {
-                // 결제 완료 관련 메시지들도 언어에 맞게 업데이트 가능
-                // 필요한 경우 여기에 추가 로직 구현
+                // 결제 완료 섹션 내의 data-i18n 속성을 가진 요소들 업데이트
+                const resultElements = resultSection.querySelectorAll('[data-i18n]');
+                resultElements.forEach(element => {
+                    const key = element.getAttribute('data-i18n');
+                    if (texts[key]) {
+                        element.textContent = texts[key];
+                    }
+                });
             }
         }
 
