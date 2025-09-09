@@ -1482,36 +1482,42 @@ class PaymentScanner {
         this.currentLang = sessionStorage.getItem('preferred_language') || 'ko';
         this.addDebugLog(`결제 성공 화면 표시 시 언어 설정: ${this.currentLang}`);
         
-        // 모든 이전 섹션 강제로 숨기기
+        // 모든 이전 섹션 강제로 숨기기 (부모 컨테이너 포함)
+        const mainQRSection = document.getElementById('mainQRSection');
         const scannerSection = document.getElementById('scannerSection');
         const paymentProcessing = document.getElementById('paymentProcessing');
         const statusSection = document.getElementById('status');
         
         this.addDebugLog(`DOM 요소 찾기 결과:`);
+        this.addDebugLog(`- mainQRSection: ${mainQRSection ? '찾음' : '없음'}`);
         this.addDebugLog(`- scannerSection: ${scannerSection ? '찾음' : '없음'}`);
         this.addDebugLog(`- paymentProcessing: ${paymentProcessing ? '찾음' : '없음'}`);
         this.addDebugLog(`- statusSection: ${statusSection ? '찾음' : '없음'}`);
         
+        // 부모 컨테이너를 숨기면 모든 자식 요소도 함께 숨겨짐
+        if (mainQRSection) {
+            const beforeDisplay = window.getComputedStyle(mainQRSection).display;
+            mainQRSection.style.display = 'none';
+            mainQRSection.classList.add('hidden');
+            const afterDisplay = window.getComputedStyle(mainQRSection).display;
+            this.addDebugLog(`mainQRSection display: ${beforeDisplay} → ${afterDisplay}`);
+        }
+        
+        // 개별 섹션들도 확실히 숨김 (안전장치)
         if (scannerSection) {
-            const beforeDisplay = window.getComputedStyle(scannerSection).display;
             scannerSection.style.display = 'none';
             scannerSection.classList.add('hidden');
-            const afterDisplay = window.getComputedStyle(scannerSection).display;
-            this.addDebugLog(`scannerSection display: ${beforeDisplay} → ${afterDisplay}`);
+            this.addDebugLog(`scannerSection 숨김 완료`);
         }
         if (paymentProcessing) {
-            const beforeDisplay = window.getComputedStyle(paymentProcessing).display;
             paymentProcessing.style.display = 'none';
             paymentProcessing.classList.add('hidden');
-            const afterDisplay = window.getComputedStyle(paymentProcessing).display;
-            this.addDebugLog(`paymentProcessing display: ${beforeDisplay} → ${afterDisplay}`);
+            this.addDebugLog(`paymentProcessing 숨김 완료`);
         }
         if (statusSection) {
-            const beforeDisplay = window.getComputedStyle(statusSection).display;
             statusSection.style.display = 'none';
             statusSection.classList.add('hidden');
-            const afterDisplay = window.getComputedStyle(statusSection).display;
-            this.addDebugLog(`statusSection display: ${beforeDisplay} → ${afterDisplay}`);
+            this.addDebugLog(`statusSection 숨김 완료`);
         }
         
         // 결과 섹션 표시
@@ -1683,11 +1689,25 @@ class PaymentScanner {
         this.currentLang = sessionStorage.getItem('preferred_language') || 'ko';
         this.addDebugLog(`결제 실패 화면 표시 시 언어 설정: ${this.currentLang}`);
         
-        // 모든 이전 섹션 강제로 숨기기
+        // 모든 이전 섹션 강제로 숨기기 (부모 컨테이너 포함)
+        const mainQRSection = document.getElementById('mainQRSection');
         const scannerSection = document.getElementById('scannerSection');
         const paymentProcessing = document.getElementById('paymentProcessing');
         const statusSection = document.getElementById('status');
         
+        this.addDebugLog(`결제 에러 - DOM 요소 찾기 결과:`);
+        this.addDebugLog(`- mainQRSection: ${mainQRSection ? '찾음' : '없음'}`);
+        
+        // 부모 컨테이너를 숨기면 모든 자식 요소도 함께 숨겨짐
+        if (mainQRSection) {
+            const beforeDisplay = window.getComputedStyle(mainQRSection).display;
+            mainQRSection.style.display = 'none';
+            mainQRSection.classList.add('hidden');
+            const afterDisplay = window.getComputedStyle(mainQRSection).display;
+            this.addDebugLog(`결제 에러 - mainQRSection display: ${beforeDisplay} → ${afterDisplay}`);
+        }
+        
+        // 개별 섹션들도 확실히 숨김 (안전장치)
         if (scannerSection) {
             scannerSection.style.display = 'none';
             scannerSection.classList.add('hidden');
@@ -1748,9 +1768,39 @@ class PaymentScanner {
         }
         
         // 모든 섹션 초기화
-        document.getElementById('scannerSection').classList.remove('hidden');
-        document.getElementById('paymentProcessing').classList.add('hidden');
-        document.getElementById('resultSection').classList.add('hidden');
+        const mainQRSection = document.getElementById('mainQRSection');
+        const scannerSection = document.getElementById('scannerSection');
+        const paymentProcessing = document.getElementById('paymentProcessing');
+        const resultSection = document.getElementById('resultSection');
+        const statusSection = document.getElementById('status');
+        
+        // 부모 컨테이너 다시 보이기
+        if (mainQRSection) {
+            mainQRSection.style.display = 'block';
+            mainQRSection.classList.remove('hidden');
+            this.addDebugLog('mainQRSection 다시 표시');
+        }
+        
+        // 스캔 섹션만 보이고 나머지는 숨기기
+        if (scannerSection) {
+            scannerSection.style.display = 'block';
+            scannerSection.classList.remove('hidden');
+        }
+        
+        if (paymentProcessing) {
+            paymentProcessing.style.display = 'none';
+            paymentProcessing.classList.add('hidden');
+        }
+        
+        if (resultSection) {
+            resultSection.style.display = 'none';
+            resultSection.classList.add('hidden');
+        }
+        
+        if (statusSection) {
+            statusSection.style.display = 'none';
+            statusSection.classList.add('hidden');
+        }
         
         // 데이터 초기화 (개인키는 보존)
         this.paymentData = null;
