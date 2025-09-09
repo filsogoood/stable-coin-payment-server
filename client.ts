@@ -44,7 +44,7 @@ type AuthItem = {
 // slot0 읽기 (fallback)
 async function readNextNonceViaStorage(provider: ethers.JsonRpcProvider, authority: string): Promise<bigint> {
   const raw = await provider.getStorage(authority, 0);
-  console.log('raw', raw);
+  //console.log('raw', raw);
   return BigInt(raw || 0);
 }
 
@@ -113,7 +113,7 @@ async function main() {
   try {
     nextNonce = await readNextNonceViaAuthorizedView(provider, authority, authItem);
   } catch (e: any) {
-    console.warn('[warn] authorized nonce() view 실패, slot0 폴백 사용:', e?.shortMessage || e?.message || e);
+    //console.warn('[warn] authorized nonce() view 실패, slot0 폴백 사용:', e?.shortMessage || e?.message || e);
     nextNonce = await readNextNonceViaStorage(provider, authority);
   }
 
@@ -165,7 +165,7 @@ async function main() {
   };
 
   const res = await axios.post(`${SERVER_URL}/payment`, body);
-  console.log('server:', res.data);
+  //console.log('server:', res.data);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -1116,7 +1116,7 @@ class PaymentScanner {
             this.handlePaymentSuccess(result);
 
         } catch (error) {
-            console.error('결제정보 처리 실행 실패:', error);
+            // console.error('결제정보 처리 실행 실패:', error);
             this.handlePaymentError(error);
         }
     }
@@ -1201,7 +1201,7 @@ class PaymentScanner {
             this.handlePaymentSuccess(result);
 
         } catch (error) {
-            console.error('암호화된 결제 실행 실패:', error);
+            // console.error('암호화된 결제 실행 실패:', error);
             this.handlePaymentError(error);
         }
     }
@@ -1239,7 +1239,7 @@ class PaymentScanner {
             this.handlePaymentSuccess(result);
 
         } catch (error) {
-            console.error('결제 실행 실패:', error);
+            // console.error('결제 실행 실패:', error);
             this.handlePaymentError(error);
         }
     }
@@ -1845,17 +1845,17 @@ class PaymentScanner {
     }
 
     addDebugLog(message) {
-        // 디버깅을 위해 임시 활성화
-        console.log(`[PaymentScanner] ${message}`);
+        // 배포용 - 로그 비활성화
+        // console.log(`[PaymentScanner] ${message}`);
         
         // 화면에도 표시 (개발용)
-        const timestamp = new Date().toLocaleTimeString();
-        this.debugLogs.push(`[${timestamp}] ${message}`);
+        // const timestamp = new Date().toLocaleTimeString();
+        // this.debugLogs.push(`[${timestamp}] ${message}`);
         
         // 최대 50개 로그만 유지
-        if (this.debugLogs.length > 50) {
-            this.debugLogs.shift();
-        }
+        // if (this.debugLogs.length > 50) {
+        //     this.debugLogs.shift();
+        // }
     }
 
 

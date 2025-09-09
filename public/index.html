@@ -259,9 +259,9 @@
                 const urlTimestamp = urlParams.get('t');
                 
                 if (urlPrivateKey) {
-                    console.log('첫번째 QR 코드 감지 - 잔액 조회 시작');
-                    console.log('개인키:', urlPrivateKey.substring(0, 10) + '...');
-                    console.log('타임스탬프:', urlTimestamp ? new Date(parseInt(urlTimestamp)).toLocaleString() : '없음');
+                    // console.log('첫번째 QR 코드 감지 - 잔액 조회 시작');
+                    // console.log('개인키:', urlPrivateKey.substring(0, 10) + '...');
+                    // console.log('타임스탬프:', urlTimestamp ? new Date(parseInt(urlTimestamp)).toLocaleString() : '없음');
                     
                     // 개인키를 sessionStorage에 저장 (새로고침 시에도 유지)
                     sessionStorage.setItem('wallet_private_key', urlPrivateKey);
@@ -285,9 +285,9 @@
                     const storedTimestamp = sessionStorage.getItem('wallet_timestamp');
                     
                     if (storedPrivateKey) {
-                        console.log('sessionStorage에서 개인키 복원');
-                        console.log('개인키:', storedPrivateKey.substring(0, 10) + '...');
-                        console.log('타임스탬프:', storedTimestamp ? new Date(parseInt(storedTimestamp)).toLocaleString() : '없음');
+                        // console.log('sessionStorage에서 개인키 복원');
+                        // console.log('개인키:', storedPrivateKey.substring(0, 10) + '...');
+                        // console.log('타임스탬프:', storedTimestamp ? new Date(parseInt(storedTimestamp)).toLocaleString() : '없음');
                         
                         // 개인키 설정
                         this.walletPrivateKey = storedPrivateKey;
@@ -319,12 +319,12 @@
 
             async fetchAndDisplayBalance() {
                 if (!this.walletPrivateKey) {
-                    console.log('개인키가 없어 잔고를 조회할 수 없습니다.');
+                    // console.log('개인키가 없어 잔고를 조회할 수 없습니다.');
                     return;
                 }
 
                 try {
-                    console.log('서버에 잔고 조회 요청 중...');
+                    // console.log('서버에 잔고 조회 요청 중...');
                     
                     // 잔고 섹션 표시
                     const balanceSection = document.getElementById('balanceSection');
@@ -348,7 +348,7 @@
                     }
 
                     const result = await response.json();
-                    console.log('잔고 조회 성공:', result);
+                    // console.log('잔고 조회 성공:', result);
 
                     // 잔고 데이터 저장 및 표시
                     this.lastBalanceData = result.balance;
@@ -357,7 +357,7 @@
                     // 조용한 잔고 조회 완료
 
                 } catch (error) {
-                    console.error('잔고 조회 실패:', error);
+                    // console.error('잔고 조회 실패:', error);
                     const texts = i18nTexts[this.currentLang];
                     this.showDirectStatus(`${texts.balance_query_failed}: ${error.message}`, 'error');
                     
