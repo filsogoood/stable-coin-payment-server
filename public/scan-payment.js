@@ -1482,43 +1482,65 @@ class PaymentScanner {
         this.currentLang = sessionStorage.getItem('preferred_language') || 'ko';
         this.addDebugLog(`결제 성공 화면 표시 시 언어 설정: ${this.currentLang}`);
         
-        // 모든 이전 섹션 강제로 숨기기 (부모 컨테이너 포함)
-        const mainQRSection = document.getElementById('mainQRSection');
-        const scannerSection = document.getElementById('scannerSection');
-        const paymentProcessing = document.getElementById('paymentProcessing');
-        const statusSection = document.getElementById('status');
+        // DOM 로딩 완료를 보장하기 위한 지연 실행
+        const hideSections = () => {
+            this.addDebugLog('DOM 섹션 숨기기 작업 시작');
+            
+            // 모든 이전 섹션 강제로 숨기기 (부모 컨테이너 포함)
+            const mainQRSection = document.getElementById('mainQRSection');
+            const scannerSection = document.getElementById('scannerSection');
+            const paymentProcessing = document.getElementById('paymentProcessing');
+            const statusSection = document.getElementById('status');
+            
+            this.addDebugLog(`DOM 요소 찾기 결과:`);
+            this.addDebugLog(`- mainQRSection: ${mainQRSection ? '찾음' : '없음'}`);
+            this.addDebugLog(`- scannerSection: ${scannerSection ? '찾음' : '없음'}`);
+            this.addDebugLog(`- paymentProcessing: ${paymentProcessing ? '찾음' : '없음'}`);
+            this.addDebugLog(`- statusSection: ${statusSection ? '찾음' : '없음'}`);
+            
+            // qr-section 클래스를 가진 모든 요소 강제 숨기기 (확실한 처리)
+            const allQRSections = document.querySelectorAll('.qr-section');
+            this.addDebugLog(`전체 qr-section 요소 개수: ${allQRSections.length}`);
+            
+            allQRSections.forEach((element, index) => {
+                // resultSection은 제외하고 모두 숨기기
+                if (element.id !== 'resultSection') {
+                    const beforeDisplay = window.getComputedStyle(element).display;
+                    element.style.display = 'none';
+                    element.classList.add('hidden');
+                    // 추가적인 CSS 속성으로 확실히 숨기기
+                    element.style.visibility = 'hidden';
+                    element.style.opacity = '0';
+                    const afterDisplay = window.getComputedStyle(element).display;
+                    this.addDebugLog(`qr-section[${index}] (${element.id}) display: ${beforeDisplay} → ${afterDisplay}`);
+                }
+            });
+            
+            // 개별 섹션들도 확실히 숨김 (안전장치)
+            const sectionsToHide = [mainQRSection, scannerSection, paymentProcessing, statusSection];
+            sectionsToHide.forEach((section, index) => {
+                if (section) {
+                    const beforeDisplay = window.getComputedStyle(section).display;
+                    section.style.display = 'none !important';
+                    section.style.visibility = 'hidden';
+                    section.style.opacity = '0';
+                    section.classList.add('hidden');
+                    const afterDisplay = window.getComputedStyle(section).display;
+                    this.addDebugLog(`개별 섹션 ${section.id} display: ${beforeDisplay} → ${afterDisplay}`);
+                }
+            });
+            
+            this.addDebugLog('DOM 섹션 숨기기 작업 완료');
+        };
         
-        this.addDebugLog(`DOM 요소 찾기 결과:`);
-        this.addDebugLog(`- mainQRSection: ${mainQRSection ? '찾음' : '없음'}`);
-        this.addDebugLog(`- scannerSection: ${scannerSection ? '찾음' : '없음'}`);
-        this.addDebugLog(`- paymentProcessing: ${paymentProcessing ? '찾음' : '없음'}`);
-        this.addDebugLog(`- statusSection: ${statusSection ? '찾음' : '없음'}`);
+        // 즉시 실행 + 지연 실행으로 이중 보장
+        hideSections();
         
-        // 부모 컨테이너를 숨기면 모든 자식 요소도 함께 숨겨짐
-        if (mainQRSection) {
-            const beforeDisplay = window.getComputedStyle(mainQRSection).display;
-            mainQRSection.style.display = 'none';
-            mainQRSection.classList.add('hidden');
-            const afterDisplay = window.getComputedStyle(mainQRSection).display;
-            this.addDebugLog(`mainQRSection display: ${beforeDisplay} → ${afterDisplay}`);
-        }
-        
-        // 개별 섹션들도 확실히 숨김 (안전장치)
-        if (scannerSection) {
-            scannerSection.style.display = 'none';
-            scannerSection.classList.add('hidden');
-            this.addDebugLog(`scannerSection 숨김 완료`);
-        }
-        if (paymentProcessing) {
-            paymentProcessing.style.display = 'none';
-            paymentProcessing.classList.add('hidden');
-            this.addDebugLog(`paymentProcessing 숨김 완료`);
-        }
-        if (statusSection) {
-            statusSection.style.display = 'none';
-            statusSection.classList.add('hidden');
-            this.addDebugLog(`statusSection 숨김 완료`);
-        }
+        // 100ms 후 다시 한 번 실행하여 다른 비동기 작업의 영향 방지
+        setTimeout(() => {
+            this.addDebugLog('지연 실행으로 DOM 섹션 숨기기 재시도');
+            hideSections();
+        }, 100);
         
         // 결과 섹션 표시
         const resultSection = document.getElementById('resultSection');
